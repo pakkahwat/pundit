@@ -1,0 +1,53 @@
+{
+  "name": "pundit",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "lint": "eslint",
+    "db:apply-schema": "tsx scripts/apply-schema.ts",
+    "db:sync-fixtures": "tsx scripts/sync-fixtures.ts",
+    "db:sync-results": "tsx scripts/sync-results.ts",
+    "db:score": "tsx scripts/score-predictions.ts",
+    "db:migrate-outcome": "tsx scripts/migrate-outcome-predictions.ts",
+    "db:migrate-articles": "tsx scripts/migrate-articles.ts",
+    "db:migrate-display-name": "tsx scripts/migrate-display-name.ts",
+    "db:reset-play": "tsx scripts/reset-play-data.ts",
+    "db:generate-article": "tsx scripts/generate-article.ts",
+    "db:seed-ai-agents": "tsx scripts/seed-ai-agents.ts",
+    "db:run-ai-predictions": "tsx scripts/run-ai-predictions.ts",
+    "test:llm": "tsx scripts/test-llm.ts",
+    "db:join-ai-agents-to-leagues": "tsx scripts/join-ai-agents-to-leagues.ts",
+    "db:reset": "tsx scripts/reset-schema.ts",
+    "db:test": "tsx scripts/test-connection.ts",
+    "db:pull": "drizzle-kit pull",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@ai-sdk/google": "^4.0.50",
+    "@auth/drizzle-adapter": "^1.11.3",
+    "ai": "^7.0.77",
+    "drizzle-orm": "^0.45.2",
+    "next": "16.3.2",
+    "next-auth": "^5.0.0-beta.32",
+    "postgres": "^3.4.9",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "dotenv": "^17.4.2",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.2",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.12",
+    "typescript": "^5"
+  }
+}

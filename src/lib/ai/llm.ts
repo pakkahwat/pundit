@@ -1,0 +1,108 @@
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { generateObject } from 'ai';
+import { z } from 'zod';
+
+import { PREDICTION_OUTCOMES, type PredictionOutcome } from '../predictions/outcome';
+import type { FormEntry, MatchContext } from './context';
+
+// schema ที่บังคับให้โมเดลตอบกลับมาเป็นโครงสร้างนี้เท่านั้น — generateObject จะ retry ให้เองถ้า
+// โมเดลตอบผิดรูป เลยไม่ต้องเขียนโค้ด parse ข้อความดิบ ๆ หรือ regex งม JSON เอง
+const predictionSchema = z.object({
+  outcome: z.enum(PREDICTION_OUTCOMES as [PredictionOutcome, ...PredictionOutcome[]]),
+  reasoning: z.string().describe('เหตุผลสั้น ๆ ไม่เกิน 2 ประโยค เป็นภาษาไทย'),
+});
+
+const SYSTEM_PROMPT = `คุณเป็นนักวิเคราะห์ฟุตบอลพรีเมียร์ลีก หน้าที่คือทายว่าแมตช์ที่กำหนดจะจบด้วยผลใด
+ตอบได้ 3 อย่างเท่านั้น: HOME (ทีมเหย้าชนะ), DRAW (เสมอ), AWAY (ทีมเยือนชนะ)
+
+ข้อมูลที่ให้มาคือทั้งหมดที่คุณมี — ห้ามอ้างอิงข้อมูลอื่นที่คุณคิดว่ารู้ เช่น ข่าวการย้ายทีม อาการบาดเจ็บ
+หรือผลการแข่งขันที่ไม่ได้อยู่ในข้อมูลนี้ เพราะข้อมูลนั้นอาจเป็นเหตุการณ์ที่ยังไม่เกิดขึ้น ณ เวลาที่ทาย
+ให้วิเคราะห์จากฟอร์มล่าสุด สถิติการเจอกัน ตารางคะแนน และความได้เปรียบของการเล่นในบ้านเท่านั้น
+
+อย่าเลี่ยงตอบ DRAW เพื่อความปลอดภัย ถ้าข้อมูลชี้ชัดว่าฝ่ายใดเหนือกว่าให้ฟันธงไปเลย`;
+
+function formLine(entries: FormEntry[]): string {
+  if (entries.length === 0) return 'ไม่มีข้อมูล';
+  return entries
+    .map(
+      (e) =>
+        `${e.result} ${e.goalsFor}-${e.goalsAgainst} ${e.isHome ? 'เหย้า' : 'เยือน'} พบ ${e.opponent}`,
+    )
+    .join(' | ');
+}
+
+// แปลง MatchContext เป็นข้อความให้โมเดลอ่าน — เก็บ prompt ที่ส่งจริงลง ai_prediction_logs ด้วย
+// เพื่อให้ย้อนตรวจได้ว่าโมเดลเห็นอะไรตอนตัดสินใจ (ไม่ใช่แค่เชื่อว่ามันเห็นสิ่งที่เราคิดว่าส่งไป)
+export function buildPrompt(ctx: MatchContext): string {
+  // ตัดตารางคะแนนเหลือ 3 อันดับแรกกับตำแหน่งของสองทีมนี้ — ส่งทั้ง 20 ทีมเปลืองโทเคนโดยไม่ช่วยอะไร
+  const standingsLines = ctx.standings
+    .map((s, i) => ({ ...s, rank: i + 1 }))
+    .filter((s) => s.rank <= 3 || s.team === ctx.homeTeam || s.team === ctx.awayTeam)
+    .map(
+      (s) =>
+        `อันดับ ${s.rank}: ${s.team} — ${s.points} แต้ม จาก ${s.played} นัด (ยิง ${s.goalsFor} เสีย ${s.goalsAgainst})`,
+    )
+    .join('\n');
+
+  return `แมตช์: ${ctx.homeTeam} (เหย้า) พบ ${ctx.awayTeam} (เยือน)
+
+ฟอร์ม 5 นัดหลังสุดของ ${ctx.homeTeam}:
+${formLine(ctx.homeForm)}
+
+ฟอร์ม 5 นัดหลังสุดของ ${ctx.awayTeam}:
+${formLine(ctx.awayForm)}
+
+สถิติการเจอกัน 5 นัดหลังสุด (มุมมองของ ${ctx.homeTeam}):
+${formLine(ctx.headToHead)}
+
+ตารางคะแนน ณ ตอนนี้:
+${standingsLines || 'ยังไม่มีข้อมูล'}
+
+ทายผลแมตช์นี้`;
+}
+
+export type LlmPredictionResult = {
+  outcome: PredictionOutcome;
+  reasoning: string;
+  prompt: string;
+  latencyMs: number;
+};
+
+// เรียก LLM ให้ทายผล — provider อ่าน API key จาก env เท่านั้น (ห้าม hardcode)
+// ใช้ Vercel AI SDK ทำให้ย้าย provider ทีหลังได้โดยแก้แค่บรรทัด model (โค้ดที่เหลือเหมือนเดิม)
+export async function llmPredict(
+  modelId: string,
+  ctx: MatchContext,
+  systemPrompt?: string | null,
+  options?: { timeoutMs?: number; maxRetries?: number },
+): Promise<LlmPredictionResult> {
+  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  if (!apiKey) {
+    throw new Error('Missing GOOGLE_GENERATIVE_AI_API_KEY ใน .env.local');
+  }
+  const google = createGoogleGenerativeAI({ apiKey });
+
+  const prompt = buildPrompt(ctx);
+  const startedAt = Date.now();
+
+  // ต้องมี timeout เสมอ — ถ้าไม่ใส่ แล้ว request ค้าง (เน็ตมีปัญหา/ปลายทางไม่ตอบ) script จะค้าง
+  // ตลอดกาลโดยไม่มี error ให้ดูเลย ซึ่ง debug ไม่ได้ ยอมให้มันล้มเร็ว ๆ พร้อมข้อความดีกว่า
+  const { object } = await generateObject({
+    model: google(modelId),
+    schema: predictionSchema,
+    system: systemPrompt || SYSTEM_PROMPT,
+    prompt,
+    abortSignal: AbortSignal.timeout(options?.timeoutMs ?? 60_000),
+    // retry เยอะกว่า default (2) เพราะ free tier ของ Gemini เจอ 503 "high demand" บ่อยช่วงพีค
+    // และ job นี้พลาดไม่ได้จริง ๆ — ถ้าทายไม่ทันก่อนคิกออฟคือเสียแมตช์เดย์นั้นถาวร ย้อนกลับไป
+    // ทายใหม่ไม่ได้ (guarded upsert จะปฏิเสธ) AI SDK ใช้ exponential backoff ให้เองอยู่แล้ว
+    maxRetries: options?.maxRetries ?? 5,
+  });
+
+  return {
+    outcome: object.outcome,
+    reasoning: object.reasoning,
+    prompt,
+    latencyMs: Date.now() - startedAt,
+  };
+}
