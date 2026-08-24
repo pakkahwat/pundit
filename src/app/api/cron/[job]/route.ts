@@ -37,7 +37,12 @@ function isAuthorized(header: string | null): boolean {
 }
 
 const JOBS = {
-  'sync-results': () => withCronRun(sqlClient, 'sync_results', () => runSyncResults(sqlClient)),
+  'sync-results': () =>
+    withCronRun(sqlClient, 'sync_results', () =>
+      // จำกัดช่วงวันที่ ±10 วัน กัน timeout บน Vercel (ดูคอมเมนต์ใน jobs/sync-results.ts) —
+      // พอสำหรับ cron ที่รันทุก 30 นาที เพราะโปรแกรมแข่งทั้งฤดูกาล sync ไว้แล้วตอน db:sync-fixtures
+      runSyncResults(sqlClient, console.log, { windowDays: 10 }),
+    ),
   score: () => withCronRun(sqlClient, 'score_predictions', () => runScorePredictions(sqlClient)),
   'ai-predictions': () =>
     withCronRun(sqlClient, 'run_ai_predictions', () =>

@@ -70,7 +70,16 @@ export async function upsertMatch(
 // sync ผลแข่งของทุกลีกที่ active อยู่ — 2 requests ต่อลีก (matches + competition)
 // วนตาม seasons ที่มีใน DB ไม่ได้ hardcode รหัสลีกไว้ เพิ่มลีกใหม่ด้วย db:sync-fixtures แล้ว
 // งานนี้จะตามไปดูแลให้เองอัตโนมัติ
-export async function runSyncResults(sql: postgres.Sql, log = console.log) {
+// windowDays: จำกัดช่วงวันที่ดึงมาจาก football-data.org (ย้อนหลัง/ล่วงหน้ากี่วัน) — จำเป็นตอนรัน
+// เป็น cron บน Vercel เพราะฟังก์ชันมีเพดานเวลา 60 วิ ถ้าดึงทั้งฤดูกาล (~380 นัดต่อลีก) มา upsert
+// ทีละแถวจะไม่ทันเวลา แต่ cron ทุก 30 นาทีสนใจแค่นัดที่เพิ่งจบ/ใกล้จะแข่งเท่านั้น โปรแกรมแข่งทั้ง
+// ฤดูกาลถูก sync ครบไว้แล้วตอนรัน db:sync-fixtures ครั้งแรก ไม่ต้องดึงซ้ำทุกรอบ
+// ไม่ใส่ค่านี้ (undefined) = ดึงทั้งฤดูกาล ใช้ตอนรันเองจากเครื่อง (npm run db:sync-results)
+export async function runSyncResults(
+  sql: postgres.Sql,
+  log = console.log,
+  options?: { windowDays?: number },
+) {
   const seasons = await sql<{ id: string; competition_code: string }[]>`
     select id, competition_code from seasons where is_active = true order by competition_code
   `;
@@ -87,9 +96,20 @@ export async function runSyncResults(sql: postgres.Sql, log = console.log) {
   let skipped = 0;
   const matchdays: Record<string, number | null> = {};
 
+  const dateRangeQuery = (() => {
+    if (!options?.windowDays) return '';
+    const toIso = (d: Date) => d.toISOString().slice(0, 10);
+    const now = new Date();
+    const from = new Date(now.getTime() - options.windowDays * 86_400_000);
+    const to = new Date(now.getTime() + options.windowDays * 86_400_000);
+    return `?dateFrom=${toIso(from)}&dateTo=${toIso(to)}`;
+  })();
+
   for (const season of seasons) {
     const code = season.competition_code;
-    const matchesRes = await fdFetch<{ matches: FdMatch[] }>(`/competitions/${code}/matches`);
+    const matchesRes = await fdFetch<{ matches: FdMatch[] }>(
+      `/competitions/${code}/matches${dateRangeQuery}`,
+    );
 
     for (const m of matchesRes.matches) {
       const homeTeamId = teamIdByExternalId.get(m.homeTeam.id);
