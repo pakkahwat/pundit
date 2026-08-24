@@ -1,48 +1,80 @@
 import { LinkButton } from './ui';
 
-// แบนเนอร์บนสุดของหน้าแรก — ตัวเลขทั้งหมดเป็นข้อมูลจริงจาก DB ไม่ใช่ตัวเลขตกแต่ง
-// เพราะแบนเนอร์ที่มีแต่สโลแกนสวย ๆ แต่ไม่บอกอะไรเลย สุดท้ายผู้ใช้ก็เลื่อนผ่านทุกครั้ง
+// แถบบนสุดของหน้าแรกสำหรับคนที่ล็อกอินแล้ว
+//
+// เดิมแถบนี้เป็นแบนเนอร์การตลาด (พาดหัวใหญ่ + คำโปรย "ทายผลแข่งกับเพื่อน...") ซึ่งเหมาะกับคนที่
+// เพิ่งเข้าเว็บครั้งแรก แต่คนที่ล็อกอินแล้วรู้อยู่แล้วว่าเว็บนี้คืออะไร เห็นซ้ำทุกครั้งก็เปลืองพื้นที่
+// จอเปล่า ๆ ตอนนี้คำโปรยพวกนั้นย้ายไปอยู่หน้า landing ของคนที่ยังไม่ล็อกอินแทน
+//
+// แถบนี้จึงเหลือหน้าที่เดียว: บอกว่า "ตอนนี้ต้องทำอะไร" — ถ้ามีนัดที่ยังไม่ได้ทายก็ดันให้เด่น
+// ที่สุดบนหน้า เพราะทายไม่ทันคิกออฟคือเสียแต้มนัดนั้นถาวร แก้ย้อนหลังไม่ได้
 export function Hero({
+  userName,
   matchday,
   leagueCount,
   pendingCount,
 }: {
+  userName: string;
   matchday: number | null;
   leagueCount: number;
   pendingCount: number;
 }) {
+  const urgent = pendingCount > 0;
+
   return (
-    <section className="animate-fade-up relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-accent/15 via-surface to-surface p-6 sm:p-8">
-      {/* วงกลมเรืองแสงมุมขวา ทำให้การ์ดไม่ดูเป็นสี่เหลี่ยมแบน ๆ — ซ่อนส่วนที่ล้นด้วย
-          overflow-hidden ของ section */}
-      <div
-        aria-hidden
-        className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-accent/20 blur-3xl"
-      />
+    <section
+      className={`animate-fade-up relative overflow-hidden rounded-2xl border p-6 sm:p-7 ${
+        urgent
+          ? 'border-accent/40 bg-gradient-to-br from-accent/20 via-surface to-surface'
+          : 'border-border bg-surface'
+      }`}
+    >
+      {urgent && (
+        <div
+          aria-hidden
+          className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-accent/20 blur-3xl"
+        />
+      )}
 
-      <div className="relative">
-        <p className="text-xs font-semibold uppercase tracking-wider text-accent">
-          พรีเมียร์ลีก {matchday ? `· แมตช์เดย์ ${matchday}` : ''}
-        </p>
+      <div className="relative sm:flex sm:items-center sm:justify-between sm:gap-6">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wider text-accent">
+            {matchday ? `แมตช์เดย์ ${matchday}` : 'ยินดีต้อนรับ'}
+          </p>
 
-        <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-          ทายผลแข่งกับเพื่อน
-          <br className="hidden sm:block" /> แล้วดูว่า AI แม่นกว่าคนไหม
-        </h1>
-
-        <p className="mt-3 max-w-lg text-sm text-muted">
-          ทุกคนทายผลแพ้ชนะเสมอก่อนเตะ ปิดรับตอนคิกออฟ แล้วเปิดพร้อมกัน — มี AI ลงแข่งด้วยจริง
-          ภายใต้กติกาและเส้นตายเดียวกันกับคน
-        </p>
-
-        <div className="mt-5 flex flex-wrap items-center gap-3">
-          {pendingCount > 0 ? (
-            <LinkButton href="/leagues">ทายเลย ({pendingCount} นัดรออยู่)</LinkButton>
+          {urgent ? (
+            <>
+              <h1 className="mt-1.5 font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+                คุณยังไม่ได้ทาย {pendingCount} นัด
+              </h1>
+              <p className="mt-1.5 text-sm text-muted">
+                ทายไม่ทันคิกออฟคือเสียแต้มนัดนั้นถาวร — แก้ย้อนหลังไม่ได้
+              </p>
+            </>
           ) : (
-            <LinkButton href="/leagues">{leagueCount > 0 ? 'ดูลีกทั้งหมด' : 'เข้าร่วมลีก'}</LinkButton>
+            <>
+              <h1 className="mt-1.5 font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+                สวัสดี {userName || 'อีกครั้ง'}
+              </h1>
+              <p className="mt-1.5 text-sm text-muted">
+                {leagueCount > 0
+                  ? 'ทายครบทุกนัดที่เปิดรับแล้ว — รอผลแข่งได้เลย'
+                  : 'ยังไม่ได้อยู่ลีกไหน เข้าร่วมลีกแล้วเริ่มทายได้เลย'}
+              </p>
+            </>
+          )}
+        </div>
+
+        <div className="mt-5 flex shrink-0 flex-wrap items-center gap-2 sm:mt-0">
+          {urgent ? (
+            <LinkButton href="/leagues">ไปทายเลย</LinkButton>
+          ) : (
+            <LinkButton href="/leagues" variant={leagueCount > 0 ? 'secondary' : 'primary'}>
+              {leagueCount > 0 ? 'ดูลีกทั้งหมด' : 'เข้าร่วมลีก'}
+            </LinkButton>
           )}
           <LinkButton href="/standings" variant="secondary">
-            ตารางคะแนนพรีเมียร์ลีก
+            ตารางคะแนน
           </LinkButton>
         </div>
       </div>

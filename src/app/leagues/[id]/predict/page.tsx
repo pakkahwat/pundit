@@ -3,14 +3,8 @@ import { alias } from 'drizzle-orm/pg-core';
 import { redirect } from 'next/navigation';
 
 import { auth } from '@/auth';
-import {
-  Card,
-  CenteredMessage,
-  EmptyState,
-  LinkButton,
-  PageHeader,
-  PageShell,
-} from '@/components/ui';
+import { Card, CenteredMessage, EmptyState, PageHeader, PageShell } from '@/components/ui';
+import { LeagueNav } from '@/components/league-nav';
 import { db } from '@/db/client';
 import { withUserContext } from '@/db/rls';
 import { leagueMembers, leagues, matches, predictions, seasons, teams } from '@/db/schema';
@@ -84,21 +78,23 @@ export default async function PredictPage({ params }: { params: Promise<{ id: st
 
   const openCount = matchRows.filter((m) => !isMatchLocked(m.kickoffAt)).length;
 
+  // นับเฉพาะนัดที่ยังเปิดรับ "และ" ยังไม่ได้ทาย — ตัวเลขเดียวกับที่แปะบนแท็บ
+  const pending = matchRows.filter(
+    (m) => !isMatchLocked(m.kickoffAt) && !predictionByMatchId.has(m.id),
+  ).length;
+
   return (
-    <PageShell>
+    <PageShell width="lg">
       <PageHeader
-        title={`แมตช์เดย์ ${currentMatchday}`}
+        title={league.name}
         subtitle={
           matchRows.length > 0
-            ? `${league.name} · ยังทายได้ ${openCount} จาก ${matchRows.length} นัด`
-            : league.name
-        }
-        actions={
-          <LinkButton href={`/leagues/${id}`} variant="secondary">
-            กลับหน้าลีก
-          </LinkButton>
+            ? `แมตช์เดย์ ${currentMatchday} · ยังทายได้ ${openCount} จาก ${matchRows.length} นัด`
+            : `แมตช์เดย์ ${currentMatchday}`
         }
       />
+
+      <LeagueNav leagueId={id} active="predict" pendingCount={pending} />
 
       {matchRows.length === 0 ? (
         <EmptyState>ยังไม่มีนัดในแมตช์เดย์นี้ (ลองรัน sync fixtures ใหม่)</EmptyState>

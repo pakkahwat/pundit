@@ -8,17 +8,19 @@ import {
   Badge,
   Card,
   CenteredMessage,
-  LinkButton,
   PageHeader,
   PageShell,
   SectionLabel,
 } from '@/components/ui';
+import { InviteLink } from '@/components/invite-link';
+import { LeagueNav } from '@/components/league-nav';
 import { StandingsTable } from '@/components/standings-table';
 import { db } from '@/db/client';
 import { leagueMembers, leagues, seasons, users } from '@/db/schema';
 import { displayNameSql } from '@/lib/display-name';
 import { competitionLabel } from '@/lib/football/competitions';
 import { getStandings } from '@/lib/football/standings';
+import { pendingPredictionCount } from '@/lib/leagues/pending';
 
 export default async function LeaguePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -26,6 +28,7 @@ export default async function LeaguePage({ params }: { params: Promise<{ id: str
   if (!session?.user?.id) {
     redirect('/');
   }
+  const userId = session.user.id;
 
   const [league] = await db.select().from(leagues).where(eq(leagues.id, id)).limit(1);
   if (!league) {
@@ -36,17 +39,13 @@ export default async function LeaguePage({ params }: { params: Promise<{ id: str
   const [membership] = await db
     .select()
     .from(leagueMembers)
-    .where(and(eq(leagueMembers.leagueId, id), eq(leagueMembers.userId, session.user.id)))
+    .where(and(eq(leagueMembers.leagueId, id), eq(leagueMembers.userId, userId)))
     .limit(1);
   if (!membership) {
     return <CenteredMessage title="คุณไม่ได้เป็นสมาชิกลีกนี้" />;
   }
 
-  const [season] = await db
-    .select()
-    .from(seasons)
-    .where(eq(seasons.id, league.seasonId))
-    .limit(1);
+  const [season] = await db.select().from(seasons).where(eq(seasons.id, league.seasonId)).limit(1);
 
   const members = await db
     .select({
@@ -59,40 +58,62 @@ export default async function LeaguePage({ params }: { params: Promise<{ id: str
     .innerJoin(users, eq(leagueMembers.userId, users.id))
     .where(eq(leagueMembers.leagueId, id));
 
+  const pending = season
+    ? await pendingPredictionCount(league.seasonId, season.currentMatchday ?? 1, userId)
+    : 0;
+
   // headers() เป็น async เหมือน params ใน Next 16 — ใช้ต่อ origin จริงของ request เพื่อสร้าง
   // ลิงก์เชิญแบบ absolute URL (ใช้ได้ทั้ง localhost ตอน dev และโดเมนจริงตอน deploy โดยไม่ต้อง hardcode)
   const hdrs = await headers();
   const origin = `${hdrs.get('x-forwarded-proto') ?? 'http'}://${hdrs.get('host')}`;
   const inviteUrl = `${origin}/join/${league.inviteCode}`;
 
+  const humanCount = members.filter((m) => m.playerKind !== 'ai').length;
+  const aiCount = members.length - humanCount;
+
   return (
-    <PageShell>
+    <PageShell width="lg">
       <PageHeader
         title={league.name}
-        subtitle={`${competitionLabel(season?.competitionCode ?? '', season?.name ?? '')} · ${members.length} ผู้เล่น`}
-        actions={
-          <>
-            <LinkButton href={`/leagues/${id}/predict`}>ทายผล</LinkButton>
-            <LinkButton href={`/leagues/${id}/leaderboard`} variant="secondary">
-              ตารางคะแนน
-            </LinkButton>
-            <LinkButton href={`/leagues/${id}/reveal`} variant="secondary">
-              คำทายทุกคน
-            </LinkButton>
-          </>
-        }
+        subtitle={`${competitionLabel(season?.competitionCode ?? '', season?.name ?? '')} · ${humanCount} คน · ${aiCount} AI`}
       />
 
-      <div className="flex flex-col gap-6">
-        <section>
-          <SectionLabel>ลิงก์เชิญเพื่อน</SectionLabel>
-          <Card padded={false}>
-            <code className="block break-all p-4 font-mono text-sm text-muted">{inviteUrl}</code>
+      <LeagueNav leagueId={id} active="overview" pendingCount={pending} />
+
+      <div className="flex flex-col gap-8">
+        {/* ถ้ายังมีนัดที่ทายไม่ครบ ให้เห็นเป็นอย่างแรกบนหน้า — เป็นสิ่งเดียวบนหน้านี้ที่มีเส้นตาย */}
+        {pending > 0 && (
+          <Card className="animate-fade-up border-accent/40 bg-accent-soft/30">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-foreground">
+                คุณยังไม่ได้ทาย <span className="font-semibold">{pending} นัด</span> ในแมตช์เดย์นี้
+              </p>
+              <a
+                href={`/leagues/${id}/predict`}
+                className="shrink-0 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover"
+              >
+                ไปทายเลย
+              </a>
+            </div>
           </Card>
-        </section>
+        )}
+
+        {/* ตารางคะแนนของลีกฟุตบอลที่กลุ่มนี้เลือกทาย — ดึงสดจาก API ผ่านแคช 30 นาที
+            ห่อด้วย Suspense เพราะเป็น fetch ออกเน็ตซึ่งช้ากว่า query DB มาก ถ้าไม่ห่อ
+            ทั้งหน้าจะรอตารางคะแนนก่อนถึงจะแสดงอะไรได้เลย ทั้งที่ส่วนอื่นพร้อมแล้ว */}
+        {season && (
+          <section>
+            <SectionLabel>
+              ตารางคะแนน{competitionLabel(season.competitionCode, season.name)}
+            </SectionLabel>
+            <Suspense fallback={<p className="text-sm text-muted">กำลังโหลดตารางคะแนน...</p>}>
+              <LeagueStandings code={season.competitionCode} />
+            </Suspense>
+          </section>
+        )}
 
         <section>
-          <SectionLabel>ผู้เล่น</SectionLabel>
+          <SectionLabel>ผู้เล่นในลีก ({members.length})</SectionLabel>
           <Card padded={false}>
             <ul className="divide-y divide-border">
               {members.map((m) => (
@@ -108,21 +129,16 @@ export default async function LeaguePage({ params }: { params: Promise<{ id: str
           </Card>
         </section>
 
-        {/* ตารางคะแนนของลีกฟุตบอลที่กลุ่มนี้เลือกทาย — ดึงสดจาก API ผ่านแคช 30 นาที
-            ห่อด้วย Suspense เพราะเป็น fetch ออกเน็ตซึ่งช้ากว่า query DB มาก ถ้าไม่ห่อ
-            ทั้งหน้าจะรอตารางคะแนนก่อนถึงจะแสดงอะไรได้เลย ทั้งที่ส่วนอื่นพร้อมแล้ว */}
-        {season && (
-          <section>
-            <SectionLabel>
-              ตารางคะแนน{competitionLabel(season.competitionCode, season.name)}
-            </SectionLabel>
-            <Suspense
-              fallback={<p className="text-sm text-muted">กำลังโหลดตารางคะแนน...</p>}
-            >
-              <LeagueStandings code={season.competitionCode} />
-            </Suspense>
-          </section>
-        )}
+        {/* ลิงก์เชิญถูกย้ายมาไว้ล่างสุด — เดิมอยู่บนสุดของหน้า ทั้งที่เป็นของที่ใช้แค่ตอนตั้งลีก
+            ครั้งแรก ส่วนตารางคะแนนกับรายชื่อผู้เล่นคือของที่กลับมาดูซ้ำทุกสัปดาห์ */}
+        <section>
+          <SectionLabel>ชวนเพื่อนเข้าลีก</SectionLabel>
+          <InviteLink url={inviteUrl} />
+          <p className="mt-2 text-xs text-muted">
+            ส่งลิงก์นี้ให้เพื่อน กดเข้ามาแล้วเข้าร่วมได้เลย — หรือให้เขาเลือกลีกนี้เองจากหน้า
+            &quot;ลีกของฉัน&quot; ก็ได้
+          </p>
+        </section>
       </div>
     </PageShell>
   );

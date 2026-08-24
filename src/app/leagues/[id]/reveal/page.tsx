@@ -8,10 +8,10 @@ import {
   Card,
   CenteredMessage,
   EmptyState,
-  LinkButton,
   PageHeader,
   PageShell,
 } from "@/components/ui";
+import { LeagueNav } from "@/components/league-nav";
 import { db } from "@/db/client";
 import { withUserContext } from "@/db/rls";
 import {
@@ -25,6 +25,7 @@ import {
 } from "@/db/schema";
 import { displayNameSql } from "@/lib/display-name";
 import { formatKickoff, isMatchLocked } from "@/lib/match-time";
+import { pendingPredictionCount } from "@/lib/leagues/pending";
 import { outcomeLabel } from "@/lib/predictions/outcome";
 
 export default async function RevealPage({
@@ -178,17 +179,16 @@ export default async function RevealPage({
       : myPendingByMatch.has(m.id),
   );
 
+  const pending = await pendingPredictionCount(league.seasonId, currentMatchday, userId);
+
   return (
-    <PageShell>
+    <PageShell width="lg">
       <PageHeader
-        title="คำทายทุกคน"
-        subtitle={`${league.name} · แมตช์เดย์ ${currentMatchday} — เปิดเผยหลังแมตช์เริ่มเท่านั้น`}
-        actions={
-          <LinkButton href={`/leagues/${id}`} variant="secondary">
-            กลับหน้าลีก
-          </LinkButton>
-        }
+        title={league.name}
+        subtitle={`คำทายทุกคน · แมตช์เดย์ ${currentMatchday} — เปิดเผยหลังแมตช์เริ่มเท่านั้น`}
       />
+
+      <LeagueNav leagueId={id} active="reveal" pendingCount={pending} />
 
       {visibleMatches.length === 0 ? (
         <EmptyState>ยังไม่มีคำทายในแมตช์เดย์นี้</EmptyState>

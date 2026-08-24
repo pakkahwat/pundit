@@ -2,9 +2,11 @@ import { and, eq, sql } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 
 import { auth } from '@/auth';
-import { Badge, Card, CenteredMessage, EmptyState, LinkButton, PageHeader, PageShell } from '@/components/ui';
+import { Badge, Card, CenteredMessage, EmptyState, PageHeader, PageShell } from '@/components/ui';
+import { LeagueNav } from '@/components/league-nav';
 import { db } from '@/db/client';
-import { leagueMembers, leagues } from '@/db/schema';
+import { leagueMembers, leagues, seasons } from '@/db/schema';
+import { pendingPredictionCount } from '@/lib/leagues/pending';
 
 type LeaderboardRow = {
   user_id: string;
@@ -36,6 +38,11 @@ export default async function LeaderboardPage({ params }: { params: Promise<{ id
     return <CenteredMessage title="คุณไม่ได้เป็นสมาชิกลีกนี้" />;
   }
 
+  const [season] = await db.select().from(seasons).where(eq(seasons.id, league.seasonId)).limit(1);
+  const pending = season
+    ? await pendingPredictionCount(league.seasonId, season.currentMatchday ?? 1, userId)
+    : 0;
+
   // ใช้ raw SQL (ผ่าน db.execute) แทนประกอบผ่าน Drizzle query builder เพราะเป็น aggregate +
   // subquery join ที่เขียนเป็น SQL ตรง ๆ อ่านง่ายกว่า — ไม่ต้องผ่าน withUserContext เลย เพราะ
   // prediction_scores ไม่มี RLS (ดูคอมเมนต์ schema.sql: จะมีแถวก็ต่อเมื่อแมตช์ FINISHED แล้วเท่านั้น
@@ -63,16 +70,10 @@ export default async function LeaderboardPage({ params }: { params: Promise<{ id
   const anyScored = rows.some((r) => r.scored_matches > 0);
 
   return (
-    <PageShell>
-      <PageHeader
-        title="ตารางคะแนน"
-        subtitle={league.name}
-        actions={
-          <LinkButton href={`/leagues/${id}`} variant="secondary">
-            กลับหน้าลีก
-          </LinkButton>
-        }
-      />
+    <PageShell width="lg">
+      <PageHeader title={league.name} subtitle="อันดับคะแนนสะสมของทุกคนในลีกนี้" />
+
+      <LeagueNav leagueId={id} active="leaderboard" pendingCount={pending} />
 
       {rows.length === 0 ? (
         <EmptyState>ยังไม่มีผู้เล่นในลีกนี้</EmptyState>
