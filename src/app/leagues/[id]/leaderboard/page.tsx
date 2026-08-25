@@ -2,7 +2,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 
 import { auth } from '@/auth';
-import { Badge, Card, CenteredMessage, EmptyState, PageHeader, PageShell } from '@/components/ui';
+import { Badge, Card, CenteredMessage, EmptyState, LinkButton, PageHeader, PageShell } from '@/components/ui';
 import { LeagueNav } from '@/components/league-nav';
 import { db } from '@/db/client';
 import { leagueMembers, leagues, seasons } from '@/db/schema';
@@ -71,7 +71,15 @@ export default async function LeaderboardPage({ params }: { params: Promise<{ id
 
   return (
     <PageShell width="lg">
-      <PageHeader title={league.name} subtitle="อันดับคะแนนสะสมของทุกคนในลีกนี้" />
+      <PageHeader
+        title={league.name}
+        subtitle="อันดับคะแนนสะสมของทุกคนในลีกนี้"
+        actions={
+          <LinkButton href="/vs-ai" variant="secondary" size="sm">
+            ดูสถิติคนปะทะ AI →
+          </LinkButton>
+        }
+      />
 
       <LeagueNav leagueId={id} active="leaderboard" pendingCount={pending} />
 

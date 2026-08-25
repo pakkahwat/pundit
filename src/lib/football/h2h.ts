@@ -7,8 +7,8 @@ export type H2hMatch = {
   id: number;
   utcDate: string;
   competition: { name: string };
-  homeTeam: { id: number; name: string; shortName: string | null };
-  awayTeam: { id: number; name: string; shortName: string | null };
+  homeTeam: { id: number; name: string; shortName: string | null; crest: string | null };
+  awayTeam: { id: number; name: string; shortName: string | null; crest: string | null };
   score: { fullTime: { home: number | null; away: number | null } };
 };
 

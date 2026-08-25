@@ -1,8 +1,8 @@
-import Image from 'next/image';
 import { redirect } from 'next/navigation';
 
 import { auth } from '@/auth';
 import { Card, CenteredMessage, LinkButton, PageHeader, PageShell, SectionLabel } from '@/components/ui';
+import { TeamCrest } from '@/components/team-crest';
 import { getTeamWithMatches, type TeamMatch } from '@/lib/football/team';
 
 function formatMatchDate(utcDate: string) {
@@ -43,17 +43,19 @@ function MatchRow({ m, teamId }: { m: TeamMatch; teamId: number }) {
 
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2 text-sm">
-          <span className={isHome ? 'font-medium text-foreground' : 'text-muted'}>
+          <TeamCrest src={m.homeTeam.crest} size={18} />
+          <span className={`truncate ${isHome ? 'font-medium text-foreground' : 'text-muted'}`}>
             {m.homeTeam.shortName ?? m.homeTeam.name}
           </span>
           {finished ? (
-            <span className="rounded bg-surface-hover px-1.5 py-0.5 text-xs tabular-nums text-foreground">
+            <span className="shrink-0 rounded bg-surface-hover px-1.5 py-0.5 text-xs tabular-nums text-foreground">
               {m.score.fullTime.home}-{m.score.fullTime.away}
             </span>
           ) : (
-            <span className="text-xs text-muted">พบ</span>
+            <span className="shrink-0 text-xs text-muted">พบ</span>
           )}
-          <span className={!isHome ? 'font-medium text-foreground' : 'text-muted'}>
+          <TeamCrest src={m.awayTeam.crest} size={18} />
+          <span className={`truncate ${!isHome ? 'font-medium text-foreground' : 'text-muted'}`}>
             {m.awayTeam.shortName ?? m.awayTeam.name}
           </span>
         </span>
@@ -92,16 +94,7 @@ export default async function TeamPage(props: PageProps<'/teams/[id]'>) {
       <PageHeader
         title={
           <span className="flex items-center gap-3">
-            {team.crest && (
-              <Image
-                src={team.crest}
-                alt=""
-                width={36}
-                height={36}
-                className="h-9 w-9 object-contain"
-                unoptimized
-              />
-            )}
+            <TeamCrest src={team.crest} size={36} />
             {team.name}
           </span>
         }

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+import { TeamCrest } from '@/components/team-crest';
 import type { H2hResult } from '@/lib/football/h2h';
 
 // ปุ่ม "สถิติเจอกัน" + dialog ที่โหลดข้อมูลตอนกดเปิดครั้งแรกเท่านั้น (lazy)
@@ -159,12 +160,14 @@ export function H2hDialog({
                 {data.matches.map((m) => (
                   <li key={m.id} className="flex items-center justify-between gap-3 p-3 text-sm">
                     <span className="min-w-0">
-                      <span className="block truncate">
-                        {m.homeTeam.shortName ?? m.homeTeam.name}{' '}
-                        <span className="mx-1 rounded bg-surface-hover px-1.5 py-0.5 text-xs tabular-nums">
+                      <span className="flex items-center gap-1.5">
+                        <TeamCrest src={m.homeTeam.crest} size={16} />
+                        <span className="truncate">{m.homeTeam.shortName ?? m.homeTeam.name}</span>
+                        <span className="mx-0.5 shrink-0 rounded bg-surface-hover px-1.5 py-0.5 text-xs tabular-nums">
                           {m.score.fullTime.home}-{m.score.fullTime.away}
-                        </span>{' '}
-                        {m.awayTeam.shortName ?? m.awayTeam.name}
+                        </span>
+                        <TeamCrest src={m.awayTeam.crest} size={16} />
+                        <span className="truncate">{m.awayTeam.shortName ?? m.awayTeam.name}</span>
                       </span>
                       <span className="mt-0.5 block text-xs text-muted">{m.competition.name}</span>
                     </span>

@@ -6,6 +6,7 @@ import { ArticleBody } from '@/components/article-body';
 import { ArticleCard } from '@/components/article-card';
 import { Hero } from '@/components/hero';
 import { Landing } from '@/components/landing';
+import { LiveMatches, LiveNotice } from '@/components/live-matches';
 import {
   Badge,
   Button,
@@ -28,6 +29,7 @@ import {
   users,
 } from '@/db/schema';
 import { displayNameSql } from '@/lib/display-name';
+import { getTodayMatches } from '@/lib/matches/today';
 
 // นี่คือ Server Component (ไม่มี "use client" ด้านบน) — รันบน server เท่านั้น เรียก auth()
 // อ่าน session ตรง ๆ ได้เลยโดยไม่ต้องส่ง API call จาก browser แบบที่ Vue/Nuxt SPA เคยทำ
@@ -99,7 +101,7 @@ export default async function Home(props: PageProps<'/'>) {
   const rawPage = Number(Array.isArray(searchParams.page) ? searchParams.page[0] : searchParams.page);
   const requestedPage = Number.isInteger(rawPage) && rawPage > 0 ? rawPage : 1;
 
-  const [myLeagues, [{ total }], [me]] = await Promise.all([
+  const [myLeagues, [{ total }], [me], todayMatches] = await Promise.all([
     db
       .select({
         id: leagues.id,
@@ -114,6 +116,7 @@ export default async function Home(props: PageProps<'/'>) {
       .orderBy(asc(leagues.name)),
     db.select({ total: count() }).from(articles),
     db.select({ name: displayNameSql }).from(users).where(eq(users.id, userId)).limit(1),
+    getTodayMatches(userId),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / ARTICLES_PER_PAGE));
@@ -197,6 +200,16 @@ export default async function Home(props: PageProps<'/'>) {
           leagueCount={myLeagues.length}
           pendingCount={totalPending}
         />
+
+        {/* บอลวันนี้ — วางไว้ใต้ Hero เพราะเป็นสิ่งที่เปลี่ยนบ่อยที่สุดบนหน้าและเป็นเหตุผลหลัก
+            ที่คนเปิดเว็บซ้ำระหว่างวัน ("คืนนี้มีบอลอะไร ทายครบยัง") */}
+        {todayMatches.length > 0 && (
+          <section>
+            <SectionLabel>บอลวันนี้</SectionLabel>
+            <LiveMatches matches={todayMatches} />
+            <LiveNotice />
+          </section>
+        )}
 
         {/* "ลีกของคุณ" ถูกย้ายขึ้นมาก่อนคอลัมน์ข่าว — เดิมอยู่ล่างสุด ผู้ใช้ที่เข้ามาเพื่อ "ไปทาย"
             (ซึ่งเป็นเหตุผลหลักที่เข้าเว็บ) ต้องเลื่อนผ่านบทความหกใบก่อนถึงจะเจอ ของที่กดบ่อยที่สุด

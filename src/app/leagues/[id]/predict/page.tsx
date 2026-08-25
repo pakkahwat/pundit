@@ -11,6 +11,7 @@ import { leagueMembers, leagues, matches, predictions, seasons, teams } from '@/
 import { formatKickoff, isMatchLocked } from '@/lib/match-time';
 
 import { H2hDialog } from '@/components/h2h-dialog';
+import { TeamCrest } from '@/components/team-crest';
 
 import { PredictionForm } from './prediction-form';
 
@@ -50,6 +51,8 @@ export default async function PredictPage({ params }: { params: Promise<{ id: st
       kickoffAt: matches.kickoffAt,
       homeTeamName: homeTeams.name,
       awayTeamName: awayTeams.name,
+      homeCrest: homeTeams.crestUrl,
+      awayCrest: awayTeams.crestUrl,
       status: matches.status,
       homeScore: matches.homeScore,
       awayScore: matches.awayScore,
@@ -114,16 +117,22 @@ export default async function PredictPage({ params }: { params: Promise<{ id: st
               <li key={m.id}>
                 <Card className={locked && !finished ? 'opacity-60' : undefined}>
                   <div className="mb-3 flex items-baseline justify-between gap-3">
-                    <span className="font-medium">
-                      <span className={teamClass(homeWon, awayWon)}>{m.homeTeamName}</span>{' '}
+                    <span className="flex min-w-0 items-center gap-2 font-medium">
+                      <TeamCrest src={m.homeCrest} size={20} />
+                      <span className={`truncate ${teamClass(homeWon, awayWon)}`}>
+                        {m.homeTeamName}
+                      </span>
                       {finished ? (
-                        <span className="mx-1 rounded bg-surface-hover px-2 py-0.5 text-sm tabular-nums text-foreground">
+                        <span className="shrink-0 rounded bg-surface-hover px-2 py-0.5 text-sm tabular-nums text-foreground">
                           {m.homeScore}-{m.awayScore}
                         </span>
                       ) : (
-                        <span className="text-muted">vs</span>
-                      )}{' '}
-                      <span className={teamClass(awayWon, homeWon)}>{m.awayTeamName}</span>
+                        <span className="shrink-0 text-muted">vs</span>
+                      )}
+                      <TeamCrest src={m.awayCrest} size={20} />
+                      <span className={`truncate ${teamClass(awayWon, homeWon)}`}>
+                        {m.awayTeamName}
+                      </span>
                     </span>
                     <span className="flex shrink-0 items-center gap-3">
                       <H2hDialog

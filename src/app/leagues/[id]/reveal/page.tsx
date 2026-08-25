@@ -12,6 +12,7 @@ import {
   PageShell,
 } from "@/components/ui";
 import { LeagueNav } from "@/components/league-nav";
+import { TeamCrest } from "@/components/team-crest";
 import { db } from "@/db/client";
 import { withUserContext } from "@/db/rls";
 import {
@@ -76,6 +77,8 @@ export default async function RevealPage({
       kickoffAt: matches.kickoffAt,
       homeTeamName: homeTeams.name,
       awayTeamName: awayTeams.name,
+      homeCrest: homeTeams.crestUrl,
+      awayCrest: awayTeams.crestUrl,
       status: matches.status,
       homeScore: matches.homeScore,
       awayScore: matches.awayScore,
@@ -212,10 +215,13 @@ export default async function RevealPage({
             return (
               <li key={m.id}>
                 <Card padded={false}>
-                  <div className="flex items-baseline justify-between gap-3 border-b border-border p-4">
-                    <span className="font-medium text-foreground">
-                      {m.homeTeamName} <span className="text-muted">vs</span>{" "}
-                      {m.awayTeamName}
+                  <div className="flex items-center justify-between gap-3 border-b border-border p-4">
+                    <span className="flex min-w-0 items-center gap-2 font-medium text-foreground">
+                      <TeamCrest src={m.homeCrest} size={20} />
+                      <span className="truncate">{m.homeTeamName}</span>
+                      <span className="shrink-0 text-muted">vs</span>
+                      <TeamCrest src={m.awayCrest} size={20} />
+                      <span className="truncate">{m.awayTeamName}</span>
                     </span>
                     <span className="shrink-0 text-xs text-muted">
                       {finished ? (

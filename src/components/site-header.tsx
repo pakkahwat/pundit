@@ -42,6 +42,7 @@ export async function SiteHeader() {
             <nav className="hidden items-center gap-1 sm:flex" aria-label="เมนูหลัก">
               <NavLink href="/">หน้าแรก</NavLink>
               <NavLink href="/leagues">ลีกของฉัน</NavLink>
+              <NavLink href="/vs-ai">คนปะทะ AI</NavLink>
               <NavLink href="/standings">ตารางคะแนน</NavLink>
               <NavLink href="/news">คอลัมน์</NavLink>
             </nav>
@@ -77,6 +78,7 @@ export async function SiteHeader() {
           >
             <NavLink href="/">หน้าแรก</NavLink>
             <NavLink href="/leagues">ลีกของฉัน</NavLink>
+            <NavLink href="/vs-ai">คนปะทะ AI</NavLink>
             <NavLink href="/standings">ตารางคะแนน</NavLink>
             <NavLink href="/news">คอลัมน์</NavLink>
           </nav>
