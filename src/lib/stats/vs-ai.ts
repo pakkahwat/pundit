@@ -25,10 +25,28 @@ const FINISHED = sql`
   m.status = 'FINISHED' and m.home_score is not null and m.away_score is not null
 `;
 
+// กรองให้เหลือเฉพาะลีกเดียว (ถ้าระบุ) — ต้องกรองสองชั้นพร้อมกัน:
+//   1. คนที่ทายต้องเป็นสมาชิกลีกนั้น
+//   2. แมตช์ต้องอยู่ในฤดูกาลที่ลีกนั้นเลือกทาย
+// ถ้ากรองแค่ชั้นเดียวจะเพี้ยน เช่นกรองแต่สมาชิก คำทายของเขาในลีกฟุตบอลอื่น (ลาลีกา) จะปนเข้ามา
+// ในสถิติของลีกที่ทายพรีเมียร์ลีกด้วย
+function leagueFilter(leagueId?: string) {
+  if (!leagueId) return sql``;
+  return sql`
+    and exists (
+      select 1 from league_members lm
+      join leagues lg on lg.id = lm.league_id
+      where lm.league_id = ${leagueId}::uuid
+        and lm.user_id = p.user_id
+        and lg.season_id = m.season_id
+    )
+  `;
+}
+
 export type KindTotals = { total: number; correct: number };
 export type VsAiSummary = { human: KindTotals; ai: KindTotals; matchesCovered: number };
 
-export async function getVsAiSummary(): Promise<VsAiSummary> {
+export async function getVsAiSummary(leagueId?: string): Promise<VsAiSummary> {
   const rows = await db.execute<{
     player_kind: 'human' | 'ai';
     total: number;
@@ -41,7 +59,7 @@ export async function getVsAiSummary(): Promise<VsAiSummary> {
     from predictions p
     join matches m on m.id = p.match_id
     join users u on u.id = p.user_id
-    where ${FINISHED}
+    where ${FINISHED} ${leagueFilter(leagueId)}
     group by u.player_kind
   `);
 
@@ -49,7 +67,7 @@ export async function getVsAiSummary(): Promise<VsAiSummary> {
     select count(distinct m.id)::int as matches_covered
     from matches m
     join predictions p on p.match_id = m.id
-    where ${FINISHED}
+    where ${FINISHED} ${leagueFilter(leagueId)}
   `);
 
   const pick = (kind: 'human' | 'ai'): KindTotals => {
@@ -71,7 +89,7 @@ export type MatchdayPoint = {
 // ความแม่นรายแมตช์เดย์ — รวมทุกลีกฟุตบอลที่ active เข้าด้วยกันตามเลขแมตช์เดย์
 // (PL แมตช์เดย์ 3 กับลาลีกาแมตช์เดย์ 3 ไม่ใช่วันเดียวกันเป๊ะ แต่ใกล้เคียงพอที่จะเทียบเป็นแกนเวลาได้
 //  และการรวมกันทำให้ตัวอย่างต่อจุดเยอะขึ้น เส้นกราฟจึงไม่กระโดดจนอ่านไม่ได้)
-export async function getAccuracyByMatchday(): Promise<MatchdayPoint[]> {
+export async function getAccuracyByMatchday(leagueId?: string): Promise<MatchdayPoint[]> {
   return db.execute<MatchdayPoint>(sql`
     select
       m.matchday,
@@ -82,7 +100,7 @@ export async function getAccuracyByMatchday(): Promise<MatchdayPoint[]> {
     from predictions p
     join matches m on m.id = p.match_id
     join users u on u.id = p.user_id
-    where ${FINISHED}
+    where ${FINISHED} ${leagueFilter(leagueId)}
     group by m.matchday
     order by m.matchday asc
   `);
@@ -96,7 +114,7 @@ export type PlayerAccuracy = {
   correct: number;
 };
 
-export async function getPlayerAccuracy(minPredictions = 1): Promise<PlayerAccuracy[]> {
+export async function getPlayerAccuracy(leagueId?: string, minPredictions = 1): Promise<PlayerAccuracy[]> {
   return db.execute<PlayerAccuracy>(sql`
     select
       u.id as "userId",
@@ -107,7 +125,7 @@ export async function getPlayerAccuracy(minPredictions = 1): Promise<PlayerAccur
     from predictions p
     join matches m on m.id = p.match_id
     join users u on u.id = p.user_id
-    where ${FINISHED}
+    where ${FINISHED} ${leagueFilter(leagueId)}
     group by u.id, u.display_name, u.name, u.player_kind
     having count(*) >= ${minPredictions}
     order by (count(*) filter (where p.predicted_outcome::text = ${ACTUAL_OUTCOME}))::float / count(*) desc,
@@ -132,7 +150,7 @@ export type SplitMatch = {
 
 // นัดที่คนกับ AI เห็นต่างกันมากที่สุด — เรียงตามส่วนต่างของอัตราถูก (AI ลบ คน)
 // เอาทั้งหัวและท้ายของรายการมาแสดง จะได้เห็นทั้ง "นัดที่ AI เอาชนะคน" และ "นัดที่คนเอาชนะ AI"
-export async function getBiggestSplits(limit = 3): Promise<{
+export async function getBiggestSplits(leagueId?: string, limit = 3): Promise<{
   aiWon: SplitMatch[];
   humansWon: SplitMatch[];
 }> {
@@ -161,7 +179,7 @@ export async function getBiggestSplits(limit = 3): Promise<{
     join users u on u.id = p.user_id
     join teams ht on ht.id = m.home_team_id
     join teams at on at.id = m.away_team_id
-    where ${FINISHED}
+    where ${FINISHED} ${leagueFilter(leagueId)}
     group by m.id, ht.name, at.name, ht.crest_url, at.crest_url, m.home_score, m.away_score, m.kickoff_at
     -- เอาเฉพาะนัดที่มีทั้งคนและ AI ทาย ไม่งั้นส่วนต่างไม่มีความหมาย
     having count(*) filter (where u.player_kind = 'human') > 0

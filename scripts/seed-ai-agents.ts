@@ -27,7 +27,7 @@ type AgentSeed = {
 const AGENTS: AgentSeed[] = [
   {
     agentKey: 'baseline-form',
-    displayName: 'Baseline AI (วิเคราะห์ฟอร์ม)',
+    displayName: 'ลุงสถิติ (ไม่ใช้ AI)',
     provider: null,
     modelId: null,
     strategy: 'static_form_based',
@@ -35,7 +35,7 @@ const AGENTS: AgentSeed[] = [
   },
   {
     agentKey: 'gemini-flash-lite',
-    displayName: 'Gemini Flash Lite',
+    displayName: 'เจ้าสายฟ้า (Gemini Flash Lite)',
     provider: 'google',
     modelId: 'gemini-flash-lite-latest',
     strategy: 'llm',
@@ -66,7 +66,7 @@ const AGENTS: AgentSeed[] = [
   // ไร้ความหมาย เพราะเราจะแยกไม่ออกว่ามันวิเคราะห์เก่งหรือแค่แอบดูเฉลย
   {
     agentKey: 'groq-gpt-oss',
-    displayName: 'GPT-OSS 120B (Groq)',
+    displayName: 'บิ๊กเบิ้ม (GPT-OSS 120B)',
     provider: 'groq',
     modelId: 'openai/gpt-oss-120b',
     strategy: 'llm',
@@ -79,7 +79,7 @@ const AGENTS: AgentSeed[] = [
   // ว่างเปล่า — น่าจะเป็นโมเดลสายคิดก่อนตอบที่พ่นข้อความคิดออกมาก่อน เลยชนกับโหมด JSON เข้มงวด
   {
     agentKey: 'groq-gpt-oss-20b',
-    displayName: 'GPT-OSS 20B (Groq)',
+    displayName: 'น้องเล็กหัวใจโต (GPT-OSS 20B)',
     provider: 'groq',
     modelId: 'openai/gpt-oss-20b',
     strategy: 'llm',
@@ -87,7 +87,7 @@ const AGENTS: AgentSeed[] = [
   },
   {
     agentKey: 'mistral-small',
-    displayName: 'Mistral Small',
+    displayName: 'ลมกรดฝรั่งเศส (Mistral Small)',
     provider: 'mistral',
     modelId: 'mistral-small-latest',
     strategy: 'llm',
@@ -104,8 +104,8 @@ async function main() {
 
   try {
     for (const a of AGENTS) {
-      const [existing] = await sql<{ id: string }[]>`
-        select id from ai_agents where agent_key = ${a.agentKey}
+      const [existing] = await sql<{ id: string; user_id: string }[]>`
+        select id, user_id from ai_agents where agent_key = ${a.agentKey}
       `;
       if (existing) {
         // อัปเดตค่าที่เปลี่ยนได้ (โดยเฉพาะ model_id) แทนการข้ามเฉย ๆ — ไม่งั้นพอเปลี่ยนรุ่นโมเดล
@@ -121,7 +121,19 @@ async function main() {
             is_active = true
           where id = ${existing.id}
         `;
-        console.log(`อัปเดต: ${a.agentKey} -> ${a.modelId ?? 'ไม่ใช้ LLM'}`);
+
+        // ต้องอัปเดตชื่อในตาราง users ด้วย ไม่ใช่แค่ ai_agents — เพราะทุกหน้าบนเว็บ
+        // (ตารางคะแนน, คนปะทะ AI, รายชื่อผู้เล่นในลีก, แจ้งเตือน Discord) อ่านชื่อจาก
+        // coalesce(users.display_name, users.name) ทั้งหมด ถ้าอัปเดตแค่ ai_agents
+        // ชื่อบนเว็บจะค้างเป็นชื่อตอนสร้างครั้งแรกตลอดไปโดยไม่มีอะไรฟ้อง
+        //
+        // เซ็ต display_name เป็น null ด้วย เพื่อให้ไฟล์นี้เป็นแหล่งความจริงเดียวของชื่อผู้เล่น AI
+        // (คอลัมน์นั้นมีไว้ให้มนุษย์ตั้งชื่อเองผ่านหน้า /settings ซึ่ง AI ล็อกอินไม่ได้อยู่แล้ว)
+        await sql`
+          update users set name = ${a.displayName}, display_name = null
+          where id = ${existing.user_id}
+        `;
+        console.log(`อัปเดต: ${a.agentKey} -> ${a.displayName}`);
         continue;
       }
 

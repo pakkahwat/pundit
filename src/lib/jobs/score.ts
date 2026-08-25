@@ -31,7 +31,15 @@ export async function runScorePredictions(sql: postgres.Sql) {
     join predictions p on p.match_id = m.id
     join league_members lm on lm.user_id = p.user_id
     join leagues l on l.id = lm.league_id and l.season_id = m.season_id
+    -- ต้องเช็คสกอร์ไม่เป็น null ด้วย ไม่ใช่เช็คแค่ status = 'FINISHED'
+    --
+    -- เหตุผล: ใน CASE ข้างบน ถ้า home_score/away_score เป็น null ทั้งคู่ การเทียบ > และ <
+    -- จะได้ null (ไม่ใช่ true) ทั้งสองอัน แล้วตกไปเข้า ELSE ซึ่งคืนค่า 'DRAW' — แปลว่าแมตช์ที่
+    -- ยังไม่มีสกอร์จะถูกนับเป็น "เสมอ" แล้วแจกแต้มให้ทุกคนที่ทายเสมอโดยที่ผลยังไม่ออก
+    -- (เกิดได้จริงเมื่อ sync ได้ status มาก่อนสกอร์ ซึ่ง football-data.org ทำแบบนั้นเป็นบางครั้ง)
     where m.status = 'FINISHED'
+      and m.home_score is not null
+      and m.away_score is not null
     on conflict (league_id, prediction_id) do update set
       points_awarded = excluded.points_awarded,
       scored_result_version = excluded.scored_result_version,

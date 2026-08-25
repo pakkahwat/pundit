@@ -1,3 +1,5 @@
+import { asc, eq } from 'drizzle-orm';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { auth } from '@/auth';
@@ -13,23 +15,39 @@ import {
   toCumulativePoints,
   type SplitMatch,
 } from '@/lib/stats/vs-ai';
+import { db } from '@/db/client';
+import { leagueMembers, leagues } from '@/db/schema';
 
 // หน้าที่ตอบคำถามหลักของทั้งโปรเจกต์: AI ทายแม่นกว่าคนไหม
 //
 // leaderboard ตอบไม่ได้เพราะมันวัด "แต้ม" ซึ่งผันตามกติกาของแต่ละลีกและปนคนกับ AI อยู่ในตาราง
 // เดียวกัน หน้านี้วัด "ความแม่น" (ทายถูกกี่ % ของที่ทายทั้งหมด) ซึ่งเทียบข้ามกลุ่มได้ตรง ๆ
 
-export default async function VsAiPage() {
+export default async function VsAiPage(props: PageProps<'/vs-ai'>) {
   const session = await auth();
   if (!session?.user?.id) {
     redirect('/');
   }
 
+  const myLeagues = await db
+    .select({ id: leagues.id, name: leagues.name })
+    .from(leagueMembers)
+    .innerJoin(leagues, eq(leagueMembers.leagueId, leagues.id))
+    .where(eq(leagueMembers.userId, session.user.id))
+    .orderBy(asc(leagues.name));
+
+  // อ่านลีกที่เลือกจาก ?league= แล้วตรวจกับรายชื่อลีกที่ผู้ใช้เป็นสมาชิกจริง — ไม่เชื่อค่าใน URL
+  // ตรง ๆ ไม่งั้นแก้ค่าเองแล้วดูสถิติของลีกที่ตัวเองไม่ได้อยู่ได้
+  const searchParams = await props.searchParams;
+  const raw = Array.isArray(searchParams.league) ? searchParams.league[0] : searchParams.league;
+  const selectedLeague = myLeagues.find((l) => l.id === raw);
+  const leagueId = selectedLeague?.id;
+
   const [summary, byMatchday, players, splits] = await Promise.all([
-    getVsAiSummary(),
-    getAccuracyByMatchday(),
-    getPlayerAccuracy(),
-    getBiggestSplits(),
+    getVsAiSummary(leagueId),
+    getAccuracyByMatchday(leagueId),
+    getPlayerAccuracy(leagueId),
+    getBiggestSplits(leagueId),
   ]);
 
   const humanPct = accuracyPct(summary.human);
@@ -42,12 +60,36 @@ export default async function VsAiPage() {
     <PageShell width="lg">
       <PageHeader
         title="คนปะทะ AI"
-        subtitle="คำถามที่เว็บนี้สร้างมาเพื่อตอบ — วัดจากความแม่น ไม่ใช่แต้ม จึงเทียบกันได้ตรง ๆ"
+        subtitle={
+          selectedLeague
+            ? `เฉพาะผู้เล่นในลีก "${selectedLeague.name}" — วัดจากความแม่น ไม่ใช่แต้ม`
+            : 'ภาพรวมทุกลีกในระบบ — วัดจากความแม่น ไม่ใช่แต้ม จึงเทียบกันได้ตรง ๆ'
+        }
       />
+
+      {/* ตัวสลับลีก — ใช้ลิงก์ล้วนไม่ใช่ dropdown แบบ JS เพื่อให้บุ๊กมาร์กหน้า "สถิติลีกเรา"
+          ไว้ได้และปุ่มย้อนกลับของเบราว์เซอร์ทำงานถูกต้อง (แนวเดียวกับตัวสลับลีกในหน้าตารางคะแนน) */}
+      {myLeagues.length > 0 && (
+        <div className="mb-6 -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+          <div className="inline-flex min-w-full gap-1 rounded-xl border border-border bg-surface p-1">
+            <LeagueTab href="/vs-ai" label="ทุกลีก" active={!leagueId} />
+            {myLeagues.map((l) => (
+              <LeagueTab
+                key={l.id}
+                href={`/vs-ai?league=${l.id}`}
+                label={l.name}
+                active={leagueId === l.id}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {!hasData ? (
         <EmptyState>
-          ยังไม่มีนัดไหนจบพร้อมคำทาย — ตัวเลขจะเริ่มขึ้นเองหลังแมตช์เดย์แรกจบและระบบคิดคะแนนแล้ว
+          {selectedLeague
+            ? `ยังไม่มีนัดไหนในลีก "${selectedLeague.name}" ที่จบพร้อมคำทาย`
+            : 'ยังไม่มีนัดไหนจบพร้อมคำทาย — ตัวเลขจะเริ่มขึ้นเองหลังแมตช์เดย์แรกจบและระบบคิดคะแนนแล้ว'}
         </EmptyState>
       ) : (
         <div className="flex flex-col gap-10">
@@ -263,5 +305,22 @@ function SplitList({
         </ul>
       )}
     </Card>
+  );
+}
+
+// ปุ่มแท็บเลือกลีก — หน้าตาเดียวกับแท็บในหน้าลีกเพื่อให้ผู้ใช้จำรูปแบบได้
+function LeagueTab({ href, label, active }: { href: string; label: string; active: boolean }) {
+  return (
+    <Link
+      href={href}
+      aria-current={active ? 'page' : undefined}
+      className={`flex-1 whitespace-nowrap rounded-lg px-3 py-2 text-center text-sm font-medium transition-colors ${
+        active
+          ? 'bg-accent text-accent-fg'
+          : 'text-muted hover:bg-surface-hover hover:text-foreground'
+      }`}
+    >
+      {label}
+    </Link>
   );
 }
