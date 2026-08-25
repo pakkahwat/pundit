@@ -1,10 +1,12 @@
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { auth } from '@/auth';
 import { Card, CenteredMessage, EmptyState, PageHeader, PageShell } from '@/components/ui';
 import { LeagueNav } from '@/components/league-nav';
+import { LinkPending } from '@/components/link-pending';
 import { db } from '@/db/client';
 import { withUserContext } from '@/db/rls';
 import { leagueMembers, leagues, matches, predictions, seasons, teams } from '@/db/schema';
@@ -15,8 +17,8 @@ import { TeamCrest } from '@/components/team-crest';
 
 import { PredictionForm } from './prediction-form';
 
-export default async function PredictPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export default async function PredictPage(props: PageProps<'/leagues/[id]/predict'>) {
+  const { id } = await props.params;
   const session = await auth();
   if (!session?.user?.id) {
     redirect('/');
@@ -42,6 +44,50 @@ export default async function PredictPage({ params }: { params: Promise<{ id: st
   const [season] = await db.select().from(seasons).where(eq(seasons.id, league.seasonId)).limit(1);
   const currentMatchday = season?.currentMatchday ?? 1;
 
+  // ── เลือกแมตช์เดย์ได้ ────────────────────────────────────────────────────────
+  //
+  // เดิมหน้านี้ล็อกไว้ที่แมตช์เดย์ปัจจุบันอย่างเดียว ซึ่งเป็นข้อจำกัดที่โหดเกินจำเป็น: โปรแกรมแข่ง
+  // ทั้งฤดูกาลประกาศล่วงหน้าอยู่แล้วและอยู่ในฐานข้อมูลเราครบ แต่ผู้เล่นที่รู้ตัวว่าสัปดาห์หน้าไม่ว่าง
+  // กลับทายล่วงหน้าไม่ได้ พอทายไม่ทันคิกออฟก็เสียแต้มถาวรแก้ย้อนหลังไม่ได้
+  //
+  // ไม่ต้องแก้เรื่องความยุติธรรมอะไรเพิ่มเลย เพราะการปิดรับบังคับที่ระดับฐานข้อมูลเป็น "รายนัด"
+  // อยู่แล้ว (เทียบ kickoff_at ของนัดนั้น ๆ กับ now() ใน guarded-upsert) ไม่ได้ผูกกับแมตช์เดย์
+  const [range] = await db
+    .select({
+      minMd: sql<number>`min(${matches.matchday})`,
+      maxMd: sql<number>`max(${matches.matchday})`,
+    })
+    .from(matches)
+    .where(eq(matches.seasonId, league.seasonId));
+
+  // แมตช์เดย์ปัจจุบัน "เตะครบทุกคู่แล้ว" หรือยัง — นับนัดที่ยังไม่ถึงเวลาคิกออฟ ถ้าเหลือ 0 แปลว่า
+  // ทุกคู่ลงสนามกันหมดแล้ว ไม่มีอะไรให้ทายในแมตช์เดย์นี้อีก
+  //
+  // ใช้ kickoff_at เทียบกับ now() ของ Postgres ไม่ใช่ status = 'FINISHED' เพราะ status ขึ้นกับว่า
+  // cron ไปดึงผลมาทันหรือยัง (ช้าได้ถึง 30 นาที) ส่วนเวลาคิกออฟเรารู้แน่นอนตั้งแต่ต้นและตรงกับ
+  // เกณฑ์ที่ใช้ปิดรับทายจริง ๆ อยู่แล้ว
+  const [currentMd] = await db
+    .select({
+      notStarted: sql<number>`count(*) filter (where ${matches.kickoffAt} > now())`,
+    })
+    .from(matches)
+    .where(and(eq(matches.seasonId, league.seasonId), eq(matches.matchday, currentMatchday)));
+
+  const currentAllKickedOff = Number(currentMd?.notStarted ?? 0) === 0;
+
+  const minMd = range?.minMd ?? 1;
+  const seasonMaxMd = range?.maxMd ?? currentMatchday;
+  // เดินหน้าได้แค่ 1 แมตช์เดย์ และต่อเมื่อแมตช์เดย์ปัจจุบันเตะครบแล้วเท่านั้น — ไม่เปิดให้ไล่ทาย
+  // ล่วงหน้าทั้งฤดูกาล เพราะโปรแกรมแข่งไกล ๆ ยังเลื่อนได้ และการทายตอนยังไม่รู้ฟอร์มก็ไม่มีความหมาย
+  // ส่วนย้อนกลับไปดูของเก่าทำได้ไม่จำกัด
+  const maxMd = Math.min(seasonMaxMd, currentAllKickedOff ? currentMatchday + 1 : currentMatchday);
+  const searchParams = await props.searchParams;
+  const rawMd = Number(Array.isArray(searchParams.md) ? searchParams.md[0] : searchParams.md);
+  // ค่าที่ไม่ใช่ตัวเลขหรืออยู่นอกช่วงจะถูกดึงกลับเข้าช่วงเสมอ ไม่ปล่อยให้หน้าว่างเปล่า
+  const selectedMd = Number.isInteger(rawMd)
+    ? Math.min(Math.max(rawMd, minMd), maxMd)
+    : currentMatchday;
+
   const homeTeams = alias(teams, 'home_teams');
   const awayTeams = alias(teams, 'away_teams');
 
@@ -61,7 +107,7 @@ export default async function PredictPage({ params }: { params: Promise<{ id: st
     .from(matches)
     .innerJoin(homeTeams, eq(matches.homeTeamId, homeTeams.id))
     .innerJoin(awayTeams, eq(matches.awayTeamId, awayTeams.id))
-    .where(and(eq(matches.seasonId, league.seasonId), eq(matches.matchday, currentMatchday)))
+    .where(and(eq(matches.seasonId, league.seasonId), eq(matches.matchday, selectedMd)))
     // เรียงให้นัดที่ยังทายได้อยู่บนสุดเสมอ แล้วค่อยตามด้วยนัดที่ปิดรับไปแล้ว ภายในแต่ละกลุ่ม
     // เรียงตามเวลาแข่งจากใกล้ไปไกล — ทำใน SQL ไม่ใช่ sort ใน JS เพราะเงื่อนไข "ปิดรับหรือยัง"
     // ต้องเทียบกับ now() ของ Postgres ตัวเดียวกับที่ใช้บังคับเวลาปิดรับตอนบันทึกคำทาย
@@ -92,15 +138,23 @@ export default async function PredictPage({ params }: { params: Promise<{ id: st
         title={league.name}
         subtitle={
           matchRows.length > 0
-            ? `แมตช์เดย์ ${currentMatchday} · ยังทายได้ ${openCount} จาก ${matchRows.length} นัด`
-            : `แมตช์เดย์ ${currentMatchday}`
+            ? `ยังทายได้ ${openCount} จาก ${matchRows.length} นัด`
+            : 'ยังไม่มีนัดในแมตช์เดย์นี้'
         }
       />
 
       <LeagueNav leagueId={id} active="predict" pendingCount={pending} />
 
+      <MatchdayNav
+        leagueId={id}
+        selected={selectedMd}
+        current={currentMatchday}
+        min={minMd}
+        max={maxMd}
+      />
+
       {matchRows.length === 0 ? (
-        <EmptyState>ยังไม่มีนัดในแมตช์เดย์นี้ (ลองรัน sync fixtures ใหม่)</EmptyState>
+        <EmptyState>ยังไม่มีนัดในแมตช์เดย์ {selectedMd}</EmptyState>
       ) : (
         <ul className="flex flex-col gap-3">
           {matchRows.map((m) => {
@@ -159,5 +213,64 @@ export default async function PredictPage({ params }: { params: Promise<{ id: st
         </ul>
       )}
     </PageShell>
+  );
+}
+
+// แถบเลื่อนแมตช์เดย์ — ปุ่มก่อนหน้า/ถัดไป พร้อมทางลัดกลับไปแมตช์เดย์ปัจจุบัน
+// ใช้ลิงก์ล้วนไม่ใช่ปุ่ม JS เพื่อให้บุ๊กมาร์กและปุ่มย้อนกลับของเบราว์เซอร์ทำงานตามที่ควร
+function MatchdayNav({
+  leagueId,
+  selected,
+  current,
+  min,
+  max,
+}: {
+  leagueId: string;
+  selected: number;
+  current: number;
+  min: number;
+  max: number;
+}) {
+  const href = (md: number) => `/leagues/${leagueId}/predict?md=${md}`;
+  const arrow =
+    'relative inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border text-sm transition-colors';
+
+  return (
+    <div className="mb-4 flex items-center justify-between gap-3">
+      {selected > min ? (
+        <Link href={href(selected - 1)} aria-label="แมตช์เดย์ก่อนหน้า" className={`${arrow} text-foreground hover:border-accent hover:bg-accent-soft hover:text-accent-soft-fg`}>
+          ←
+          <LinkPending />
+        </Link>
+      ) : (
+        <span className={`${arrow} cursor-not-allowed text-muted opacity-40`} aria-hidden>
+          ←
+        </span>
+      )}
+
+      <span className="min-w-0 text-center">
+        <span className="block font-display text-lg font-semibold text-foreground">
+          แมตช์เดย์ {selected}
+        </span>
+        {selected === current ? (
+          <span className="text-xs text-accent">แมตช์เดย์ปัจจุบัน</span>
+        ) : (
+          <Link href={href(current)} className="text-xs text-muted hover:text-foreground hover:underline">
+            {selected < current ? 'ผ่านไปแล้ว' : 'ล่วงหน้า'} · กลับไปแมตช์เดย์ {current}
+          </Link>
+        )}
+      </span>
+
+      {selected < max ? (
+        <Link href={href(selected + 1)} aria-label="แมตช์เดย์ถัดไป" className={`${arrow} text-foreground hover:border-accent hover:bg-accent-soft hover:text-accent-soft-fg`}>
+          →
+          <LinkPending />
+        </Link>
+      ) : (
+        <span className={`${arrow} cursor-not-allowed text-muted opacity-40`} aria-hidden>
+          →
+        </span>
+      )}
+    </div>
   );
 }

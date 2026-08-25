@@ -2,9 +2,9 @@
 
 import { useActionState } from 'react';
 
-import { Button } from '@/components/ui';
 
 import { saveDiscordWebhook, type WebhookState } from './actions';
+import { SubmitButton } from '@/components/submit-button';
 
 // ฟอร์มตั้ง webhook ของ Discord — เห็นเฉพาะเจ้าของลีก (หน้า page ซ่อนไว้ และ action เช็คสิทธิ์ซ้ำ
 // อีกชั้นที่ server เพราะ Server Action ถูกเรียกตรง ๆ ได้โดยไม่ผ่าน UI)
@@ -13,7 +13,7 @@ import { saveDiscordWebhook, type WebhookState } from './actions';
 // ได้ทันที ไม่มีเหตุผลที่ต้องส่งมันกลับมาแสดงบนหน้าจอทุกครั้งที่เปิดหน้าลีก บอกแค่ว่า "เปิดอยู่"
 // ก็พอ อยากเปลี่ยนก็วางอันใหม่ทับ
 export function DiscordForm({ leagueId, enabled }: { leagueId: string; enabled: boolean }) {
-  const [state, action, pending] = useActionState<WebhookState, FormData>(
+  const [state, action] = useActionState<WebhookState, FormData>(
     saveDiscordWebhook.bind(null, leagueId),
     {},
   );
@@ -27,9 +27,7 @@ export function DiscordForm({ leagueId, enabled }: { leagueId: string; enabled: 
           placeholder={enabled ? 'วางลิงก์ใหม่เพื่อเปลี่ยน (เว้นว่าง = ปิด)' : 'https://discord.com/api/webhooks/...'}
           className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
         />
-        <Button type="submit" disabled={pending}>
-          {pending ? 'กำลังทดสอบ...' : 'บันทึก'}
-        </Button>
+        <SubmitButton>บันทึก</SubmitButton>
       </div>
 
       {state.ok && <p className="text-sm text-success">{state.ok}</p>}

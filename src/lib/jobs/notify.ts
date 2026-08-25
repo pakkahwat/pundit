@@ -349,7 +349,51 @@ async function recapRule(sql: postgres.Sql, league: League): Promise<Candidate[]
   ];
 }
 
-const RULES = [deadlineRule, revealRule, leadChangeRule, aiSplitRule, recapRule];
+// ── กติกาที่ 6: มีคอลัมน์ใหม่ ──────────────────────────────────────────────────
+// ยิงเมื่อ AI เขียนคอลัมน์ประจำวันของลีกฟุตบอลที่กลุ่มนี้ทายเสร็จ
+//
+// ส่งแค่หัวข้อกับย่อหน้าแรก ไม่ยัดทั้งบทความลงห้องแชท — จุดประสงค์คือชวนให้กดไปอ่านบนเว็บ
+// ไม่ใช่แทนที่หน้าเว็บ (และ Discord ก็จะตัดข้อความยาวเกินทิ้งอยู่ดี)
+//
+// ลิงก์ใช้ AUTH_URL ที่ตั้งไว้อยู่แล้วสำหรับ Auth.js แทนที่จะเพิ่ม env ใหม่อีกตัวให้ต้องดูแล
+// ถ้าไม่ได้ตั้ง (เช่นตอนรันในเครื่อง) ก็แค่ไม่มีลิงก์ ข้อความอื่นยังส่งได้ปกติ
+async function articleRule(sql: postgres.Sql, league: League): Promise<Candidate[]> {
+  const [article] = await sql<{ id: string; title: string; body: string }[]>`
+    select id, title, body
+    from articles
+    where season_id = ${league.season_id}
+      and created_at > now() - interval '24 hours'
+    order by published_on desc, created_at desc
+    limit 1
+  `;
+  if (!article) return [];
+
+  // ย่อหน้าแรก ตัด ** ของ markdown ออกก่อนเพราะ Discord ตีความคนละแบบกับที่เราเรนเดอร์บนเว็บ
+  const first = article.body.split(/\n{2,}/)[0]?.replace(/\*\*/g, '').trim() ?? '';
+  const excerpt = first.length > 300 ? `${first.slice(0, 300)}…` : first;
+
+  const base = process.env.AUTH_URL?.replace(/\/$/, '');
+  const link = base ? `\n\n[อ่านฉบับเต็ม](${base}/news/${article.id})` : '';
+
+  return [
+    {
+      kind: 'article',
+      ref: article.id,
+      message: {
+        embeds: [
+          {
+            title: `📰 ${article.title}`,
+            description: `${excerpt}${link}`,
+            color: COLOR.neutral,
+            footer: { text: `คอลัมน์ประจำวันที่ AI เขียน · ${league.name}` },
+          },
+        ],
+      },
+    },
+  ];
+}
+
+const RULES = [deadlineRule, revealRule, leadChangeRule, aiSplitRule, recapRule, articleRule];
 
 export async function runNotify(sql: postgres.Sql, log = console.log) {
   const leagues = await sql<League[]>`

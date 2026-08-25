@@ -8,7 +8,7 @@ import { displayNameSql } from '@/lib/display-name';
 
 import { Logo } from './logo';
 import { NavLink } from './nav-link';
-import { Button } from './ui';
+import { SubmitButton } from '@/components/submit-button';
 
 // session ของ Auth.js เก็บชื่อจาก Google ไว้ ไม่รู้จัก display_name ที่ผู้ใช้ตั้งเอง เลยต้องอ่าน
 // จาก DB ตรง ๆ — ทำที่นี่ที่เดียวเพราะแถบหัวเว็บอยู่ใน layout จึงเรนเดอร์ทุกหน้าอยู่แล้ว
@@ -62,9 +62,9 @@ export async function SiteHeader() {
                   await signOut();
                 }}
               >
-                <Button type="submit" variant="ghost" size="sm">
+                <SubmitButton variant="ghost" size="sm">
                   ออกจากระบบ
-                </Button>
+                </SubmitButton>
               </form>
             </div>
           )}

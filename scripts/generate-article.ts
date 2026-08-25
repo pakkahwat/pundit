@@ -61,10 +61,13 @@ async function main() {
           onLog: (m) => console.log(`[${date}] ${m}`),
         }),
       );
-      if (result.skipped) {
-        console.log(`[${date}] ข้าม (มีอยู่แล้ว) — ใช้ --force ถ้าต้องการเขียนทับ`);
-      } else if (result.body && dates.length === 1) {
-        console.log(`\n${result.body}\n`);
+      // สรุปเป็นรายลีก เพราะตอนนี้เขียนลีกละหนึ่งบทต่อวัน ไม่ใช่บทเดียวทั้งระบบ
+      console.log(
+        `[${date}] เขียนใหม่ ${result.processed} · ข้าม ${result.skipped} · ล้มเหลว ${result.failed}`,
+      );
+      for (const title of result.titles) console.log(`         "${title}"`);
+      if (result.skipped > 0 && result.processed === 0) {
+        console.log(`         ใช้ --force ถ้าต้องการเขียนทับของเดิม`);
       }
     }
   } finally {

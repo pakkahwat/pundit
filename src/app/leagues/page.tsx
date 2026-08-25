@@ -3,12 +3,13 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { auth } from '@/auth';
-import { Badge, Button, Card, EmptyState, LinkButton, PageHeader, PageShell, SectionLabel } from '@/components/ui';
+import { Badge, Card, EmptyState, LinkButton, PageHeader, PageShell, SectionLabel } from '@/components/ui';
 import { db } from '@/db/client';
 import { leagues, seasons } from '@/db/schema';
 import { competitionLabel } from '@/lib/football/competitions';
 
 import { joinLeagueById } from './actions';
+import { SubmitButton } from '@/components/submit-button';
 
 // หน้ารวมลีกทั้งหมดที่เปิดให้เข้าร่วมได้เลย ไม่ต้องมีลิงก์เชิญ — ลดขั้นตอนจาก
 // "ขอลิงก์จากเพื่อน -> เปิดลิงก์ -> กดเข้าร่วม" เหลือ "เลือกลีก -> เริ่มทาย"
@@ -114,9 +115,7 @@ export default async function LeaguesPage() {
                     {/* .bind ผูก leagueId เข้าไปกับ Server Action ล่วงหน้า ทำให้ฟอร์มนี้ไม่ต้องมี
                         hidden input ที่ผู้ใช้แก้ค่าเองได้จาก devtools */}
                     <form action={joinLeagueById.bind(null, l.id)} className="shrink-0">
-                      <Button type="submit" size="sm">
-                        เข้าร่วมแล้วทายเลย
-                      </Button>
+                      <SubmitButton size="sm">เข้าร่วมแล้วทายเลย</SubmitButton>
                     </form>
                   </Card>
                 </li>

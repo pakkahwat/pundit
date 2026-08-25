@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+import { LinkPending } from './link-pending';
+
 // ลิงก์ในแถบหัวเว็บที่รู้ว่าตัวเองคือหน้าที่กำลังเปิดอยู่หรือเปล่า
 //
 // เป็น client component ตัวเดียวในแถบหัวเว็บ เพราะ usePathname() อ่านได้เฉพาะฝั่ง browser
@@ -19,13 +21,14 @@ export function NavLink({ href, children }: { href: string; children: React.Reac
     <Link
       href={href}
       aria-current={isActive ? 'page' : undefined}
-      className={`rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${
+      className={`relative rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${
         isActive
           ? 'bg-accent-soft text-accent-soft-fg'
           : 'text-muted hover:bg-surface-hover hover:text-foreground'
       }`}
     >
       {children}
+      <LinkPending />
     </Link>
   );
 }

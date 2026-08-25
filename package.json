@@ -28,7 +28,8 @@
     "db:migrate-notifications": "tsx scripts/migrate-notifications.ts",
     "db:test-llm": "tsx scripts/test-llm.ts",
     "db:list-models": "tsx scripts/list-models.ts",
-    "db:remove-ai-agent": "tsx scripts/remove-ai-agent.ts"
+    "db:remove-ai-agent": "tsx scripts/remove-ai-agent.ts",
+    "db:season-status": "tsx scripts/season-status.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.50",

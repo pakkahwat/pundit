@@ -1,5 +1,7 @@
 import Link from 'next/link';
 
+import { LinkPending } from './link-pending';
+
 // แถบแท็บของหน้าลีก — ปัญหาเดิมคือแต่ละหน้าย่อย (ทายผล/อันดับ/คำทายทุกคน) มีแค่ปุ่ม
 // "กลับหน้าลีก" ผู้ใช้จึงต้องเด้งกลับหน้าลีกทุกครั้งที่อยากสลับไปดูอีกหน้า และไม่มีอะไรบอกว่า
 // ตอนนี้อยู่หน้าไหน แท็บชุดนี้แก้ทั้งสองอย่าง: สลับหน้าไหนก็ได้ในคลิกเดียว และเห็นตำแหน่งตัวเอง
@@ -35,7 +37,7 @@ export function LeagueNav({
               key={tab.key}
               href={`/leagues/${leagueId}${tab.path}`}
               aria-current={isActive ? 'page' : undefined}
-              className={`flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+              className={`relative flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                 isActive
                   ? 'bg-accent text-accent-fg'
                   : 'text-muted hover:bg-surface-hover hover:text-foreground'
@@ -53,6 +55,7 @@ export function LeagueNav({
                   {pendingCount}
                 </span>
               )}
+              <LinkPending />
             </Link>
           );
         })}

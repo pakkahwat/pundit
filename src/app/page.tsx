@@ -9,7 +9,6 @@ import { Landing } from '@/components/landing';
 import { LiveMatches, LiveNotice } from '@/components/live-matches';
 import {
   Badge,
-  Button,
   Card,
   EmptyState,
   LinkButton,
@@ -30,6 +29,7 @@ import {
 } from '@/db/schema';
 import { displayNameSql } from '@/lib/display-name';
 import { getTodayMatches } from '@/lib/matches/today';
+import { SubmitButton } from '@/components/submit-button';
 
 // นี่คือ Server Component (ไม่มี "use client" ด้านบน) — รันบน server เท่านั้น เรียก auth()
 // อ่าน session ตรง ๆ ได้เลยโดยไม่ต้องส่ง API call จาก browser แบบที่ Vue/Nuxt SPA เคยทำ
@@ -84,9 +84,9 @@ export default async function Home(props: PageProps<'/'>) {
               await signIn('google');
             }}
           >
-            <Button type="submit" className="px-6 py-2.5 text-base">
+            <SubmitButton className="px-6 py-2.5 text-base">
               เข้าสู่ระบบด้วย Google
-            </Button>
+            </SubmitButton>
           </form>
         }
       />

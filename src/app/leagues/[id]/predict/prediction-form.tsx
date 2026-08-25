@@ -2,7 +2,6 @@
 
 import { useActionState } from 'react';
 
-import { Button } from '@/components/ui';
 import {
   outcomeLabel,
   PREDICTION_OUTCOMES,
@@ -10,6 +9,7 @@ import {
 } from '@/lib/predictions/outcome';
 
 import { submitPrediction, type SubmitPredictionState } from './actions';
+import { SubmitButton } from '@/components/submit-button';
 
 const initialState: SubmitPredictionState = {};
 
@@ -27,7 +27,7 @@ export function PredictionForm({
   locked: boolean;
 }) {
   const boundAction = submitPrediction.bind(null, matchId);
-  const [state, formAction, pending] = useActionState(boundAction, initialState);
+  const [state, formAction] = useActionState(boundAction, initialState);
 
   if (locked) {
     return (
@@ -67,9 +67,7 @@ export function PredictionForm({
       </div>
 
       <div className="flex items-center gap-3">
-        <Button type="submit" size="sm" disabled={pending}>
-          {pending ? 'กำลังบันทึก...' : 'บันทึก'}
-        </Button>
+        <SubmitButton size="sm">บันทึก</SubmitButton>
         {state.success && <span className="animate-fade-up text-xs text-success">บันทึกแล้ว</span>}
         {state.error && <span className="text-xs text-danger">{state.error}</span>}
       </div>

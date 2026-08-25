@@ -1,11 +1,12 @@
 import { eq } from 'drizzle-orm';
 
 import { auth, signIn } from '@/auth';
-import { Button, CenteredMessage } from '@/components/ui';
+import { CenteredMessage } from '@/components/ui';
 import { db } from '@/db/client';
 import { leagues } from '@/db/schema';
 
 import { joinLeague } from './actions';
+import { SubmitButton } from '@/components/submit-button';
 
 export default async function JoinPage({ params }: { params: Promise<{ inviteCode: string }> }) {
   const { inviteCode } = await params;
@@ -32,7 +33,7 @@ export default async function JoinPage({ params }: { params: Promise<{ inviteCod
             await signIn('google', { redirectTo: `/join/${inviteCode}` });
           }}
         >
-          <Button type="submit">เข้าสู่ระบบด้วย Google</Button>
+          <SubmitButton>เข้าสู่ระบบด้วย Google</SubmitButton>
         </form>
       </CenteredMessage>
     );
@@ -43,7 +44,7 @@ export default async function JoinPage({ params }: { params: Promise<{ inviteCod
   return (
     <CenteredMessage title={`เข้าร่วมลีก "${league.name}"?`}>
       <form action={joinThisLeague}>
-        <Button type="submit">เข้าร่วม</Button>
+        <SubmitButton>เข้าร่วม</SubmitButton>
       </form>
     </CenteredMessage>
   );

@@ -2,9 +2,9 @@
 
 import { useActionState } from 'react';
 
-import { Button } from '@/components/ui';
 
 import { updateDisplayName, type UpdateDisplayNameState } from './actions';
+import { SubmitButton } from '@/components/submit-button';
 
 const initialState: UpdateDisplayNameState = {};
 
@@ -15,7 +15,7 @@ export function DisplayNameForm({
   currentDisplayName: string | null;
   googleName: string | null;
 }) {
-  const [state, formAction, pending] = useActionState(updateDisplayName, initialState);
+  const [state, formAction] = useActionState(updateDisplayName, initialState);
 
   return (
     <form action={formAction} className="flex flex-col gap-3">
@@ -36,9 +36,7 @@ export function DisplayNameForm({
       {state.error && <p className="text-sm text-danger">{state.error}</p>}
       {state.success && <p className="text-sm text-success">บันทึกแล้ว</p>}
 
-      <Button type="submit" disabled={pending} className="self-start">
-        {pending ? 'กำลังบันทึก...' : 'บันทึก'}
-      </Button>
+      <SubmitButton className="self-start">บันทึก</SubmitButton>
     </form>
   );
 }

@@ -6,6 +6,7 @@ import { StandingsTable } from '@/components/standings-table';
 import { EmptyState, LinkButton, PageHeader, PageShell } from '@/components/ui';
 import { COMPETITIONS, competitionByCode } from '@/lib/football/competitions';
 import { getStandings } from '@/lib/football/standings';
+import { LinkPending } from '@/components/link-pending';
 
 export default async function StandingsPage(props: PageProps<'/standings'>) {
   const session = await auth();
@@ -41,13 +42,14 @@ export default async function StandingsPage(props: PageProps<'/standings'>) {
           <Link
             key={c.code}
             href={`/standings?competition=${c.code}`}
-            className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${
+            className={`relative rounded-lg border px-3 py-1.5 text-sm transition-colors ${
               c.code === code
                 ? 'border-transparent bg-accent text-accent-fg'
                 : 'border-border text-muted hover:bg-surface-hover hover:text-foreground'
             }`}
           >
             {c.shortName}
+            <LinkPending />
           </Link>
         ))}
       </nav>

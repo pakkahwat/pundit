@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 
 import { auth } from '@/auth';
 import { AccuracyChart, type ChartPoint } from '@/components/accuracy-chart';
+import { LinkPending } from '@/components/link-pending';
 import { TeamCrest } from '@/components/team-crest';
 import { Badge, Card, EmptyState, PageHeader, PageShell, SectionLabel } from '@/components/ui';
 import {
@@ -314,13 +315,14 @@ function LeagueTab({ href, label, active }: { href: string; label: string; activ
     <Link
       href={href}
       aria-current={active ? 'page' : undefined}
-      className={`flex-1 whitespace-nowrap rounded-lg px-3 py-2 text-center text-sm font-medium transition-colors ${
+      className={`relative flex-1 whitespace-nowrap rounded-lg px-3 py-2 text-center text-sm font-medium transition-colors ${
         active
           ? 'bg-accent text-accent-fg'
           : 'text-muted hover:bg-surface-hover hover:text-foreground'
       }`}
     >
       {label}
+      <LinkPending />
     </Link>
   );
 }

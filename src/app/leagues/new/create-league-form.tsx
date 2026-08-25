@@ -2,9 +2,9 @@
 
 import { useActionState } from 'react';
 
-import { Button } from '@/components/ui';
 
 import { createLeague, type CreateLeagueState } from './actions';
+import { SubmitButton } from '@/components/submit-button';
 
 const initialState: CreateLeagueState = {};
 
@@ -16,7 +16,7 @@ export function CreateLeagueForm({
 }: {
   competitions: { code: string; name: string }[];
 }) {
-  const [state, formAction, pending] = useActionState(createLeague, initialState);
+  const [state, formAction] = useActionState(createLeague, initialState);
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
@@ -53,9 +53,7 @@ export function CreateLeagueForm({
 
       {state.error && <p className="text-sm text-danger">{state.error}</p>}
 
-      <Button type="submit" disabled={pending} className="self-start">
-        {pending ? 'กำลังสร้าง...' : 'สร้างลีก'}
-      </Button>
+      <SubmitButton className="self-start">สร้างลีก</SubmitButton>
     </form>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+import { PitchLoader } from '@/components/pitch-loader';
 import { TeamCrest } from '@/components/team-crest';
 import type { H2hResult } from '@/lib/football/h2h';
 
@@ -122,7 +123,11 @@ export function H2hDialog({
             </button>
           </div>
 
-          {loading && <p className="text-sm text-muted">กำลังโหลด...</p>}
+          {loading && (
+            <div className="py-6">
+              <PitchLoader label="กำลังดึงสถิติ..." />
+            </div>
+          )}
           {error && <p className="text-sm text-danger">{error}</p>}
 
           {tally && tally.played === 0 && (

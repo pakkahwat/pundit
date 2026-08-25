@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import type { ComponentProps, ReactNode } from 'react';
 
+import { LinkPending } from './link-pending';
+
 // UI primitive ที่ใช้ร่วมกันทั้งแอป — ทั้งหมดเป็น Server Component ธรรมดา (ไม่มี 'use client')
 // เพราะเป็นแค่การจัดวาง/สไตล์ ไม่มี state หรือ event handler เลย ทำให้ไม่ต้องส่ง JS ไปฝั่ง browser
 
@@ -118,16 +120,27 @@ export function Button({
   return <button className={`${buttonClass(variant, size)} ${className}`} {...props} />;
 }
 
+// ปุ่มที่พาไปหน้าอื่น — แสดงตัวหมุนทับตัวเองระหว่างที่หน้าปลายทางยังโหลดไม่เสร็จ
+//
+// จำเป็นเพราะหน้าส่วนใหญ่ในแอปนี้ดึงข้อมูลจาก DB (บางหน้าจาก API ภายนอกด้วย) การกดแล้วเงียบ
+// ไปครึ่งวินาทีทำให้คนกดซ้ำ — ตัว loading เต็มหน้าจาก loading.tsx ตอบโจทย์คนละจังหวะกัน
+// (อันนั้นขึ้นตอนหน้าเปลี่ยนแล้ว อันนี้ขึ้นตั้งแต่วินาทีที่กด)
 export function LinkButton({
   variant = 'primary',
   size = 'md',
   className = '',
+  children,
   ...props
 }: ComponentProps<typeof Link> & {
   variant?: keyof typeof BUTTON_VARIANTS;
   size?: keyof typeof BUTTON_SIZES;
 }) {
-  return <Link className={`${buttonClass(variant, size)} ${className}`} {...props} />;
+  return (
+    <Link className={`relative ${buttonClass(variant, size)} ${className}`} {...props}>
+      {children}
+      <LinkPending />
+    </Link>
+  );
 }
 
 export function EmptyState({ children }: { children: ReactNode }) {
