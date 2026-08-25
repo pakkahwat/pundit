@@ -11,6 +11,7 @@ import {
   smallint,
   jsonb,
   uniqueIndex,
+  unique,
   index,
 } from 'drizzle-orm/pg-core';
 
@@ -185,6 +186,7 @@ export const leagues = pgTable('leagues', {
     .notNull()
     .default(sql`'{"correct":3,"wrong":0}'::jsonb`),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  discordWebhookUrl: text('discord_webhook_url'),
 });
 
 export const leagueMembers = pgTable(
@@ -297,6 +299,21 @@ export const apiCache = pgTable('api_cache', {
   fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
 });
+
+// กันการโพสต์ข้อความเดิมซ้ำเข้ากลุ่ม — unique (league_id, kind, ref) เป็นตัวบังคับจริง
+export const notificationsSent = pgTable(
+  'notifications_sent',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    leagueId: uuid('league_id')
+      .notNull()
+      .references(() => leagues.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    ref: text('ref').notNull(),
+    sentAt: timestamp('sent_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique().on(t.leagueId, t.kind, t.ref)],
+);
 
 export const cronRuns = pgTable('cron_runs', {
   id: uuid('id').primaryKey().defaultRandom(),

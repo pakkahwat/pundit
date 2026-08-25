@@ -14,6 +14,8 @@ import {
 } from '@/components/ui';
 import { InviteLink } from '@/components/invite-link';
 import { LeagueNav } from '@/components/league-nav';
+
+import { DiscordForm } from './discord-form';
 import { StandingsTable } from '@/components/standings-table';
 import { db } from '@/db/client';
 import { leagueMembers, leagues, seasons, users } from '@/db/schema';
@@ -44,6 +46,7 @@ export default async function LeaguePage({ params }: { params: Promise<{ id: str
   if (!membership) {
     return <CenteredMessage title="คุณไม่ได้เป็นสมาชิกลีกนี้" />;
   }
+  const isOwner = membership.role === 'owner';
 
   const [season] = await db.select().from(seasons).where(eq(seasons.id, league.seasonId)).limit(1);
 
@@ -139,6 +142,17 @@ export default async function LeaguePage({ params }: { params: Promise<{ id: str
             &quot;ลีกของฉัน&quot; ก็ได้
           </p>
         </section>
+
+        {/* ตั้งค่าแจ้งเตือน Discord — เห็นเฉพาะเจ้าของลีก และ URL เดิมไม่ถูกส่งมาแสดงเลย
+            (ส่งมาแค่ boolean ว่าเปิดอยู่ไหม) เพราะใครถือลิงก์นั้นก็โพสต์เข้าห้องเขาได้ */}
+        {isOwner && (
+          <section>
+            <SectionLabel>แจ้งเตือนเข้า Discord</SectionLabel>
+            <Card>
+              <DiscordForm leagueId={id} enabled={Boolean(league.discordWebhookUrl)} />
+            </Card>
+          </section>
+        )}
       </div>
     </PageShell>
   );

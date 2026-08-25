@@ -1,4 +1,7 @@
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createGroq } from '@ai-sdk/groq';
+import { createMistral } from '@ai-sdk/mistral';
+import type { LanguageModel } from 'ai';
 import { generateObject } from 'ai';
 import { z } from 'zod';
 
@@ -68,19 +71,58 @@ export type LlmPredictionResult = {
   latencyMs: number;
 };
 
-// เรียก LLM ให้ทายผล — provider อ่าน API key จาก env เท่านั้น (ห้าม hardcode)
-// ใช้ Vercel AI SDK ทำให้ย้าย provider ทีหลังได้โดยแก้แค่บรรทัด model (โค้ดที่เหลือเหมือนเดิม)
+// ── ผู้ให้บริการโมเดล ─────────────────────────────────────────────────────────
+//
+// ผู้เล่น AI แต่ละตัวเก็บ provider + model_id ไว้ใน DB (ตาราง ai_agents) ไม่ได้ hardcode ในโค้ด
+// เพิ่ม/เปลี่ยนรุ่นจึงทำได้ที่ scripts/seed-ai-agents.ts อย่างเดียว
+//
+// สำคัญต่อความเป็นการทดลองที่ยุติธรรม: ทุก provider ใช้ prompt เดียวกัน schema เดียวกัน และ
+// context เดียวกันเป๊ะ ๆ (ดู buildPrompt ข้างบน) — ตัวแปรเดียวที่ต่างกันคือ "โมเดล" เท่านั้น
+// ถ้าเผลอปรับ prompt ให้ตัวใดตัวหนึ่งเป็นพิเศษ ผลเปรียบเทียบทั้งฤดูกาลจะใช้ไม่ได้ทันที
+const PROVIDERS: Record<string, { envKey: string; build: (apiKey: string, modelId: string) => LanguageModel }> = {
+  google: {
+    envKey: 'GOOGLE_GENERATIVE_AI_API_KEY',
+    build: (apiKey, modelId) => createGoogleGenerativeAI({ apiKey })(modelId),
+  },
+  groq: {
+    envKey: 'GROQ_API_KEY',
+    build: (apiKey, modelId) => createGroq({ apiKey })(modelId),
+  },
+  mistral: {
+    envKey: 'MISTRAL_API_KEY',
+    build: (apiKey, modelId) => createMistral({ apiKey })(modelId),
+  },
+};
+
+export function providerNames(): string[] {
+  return Object.keys(PROVIDERS);
+}
+
+// มี API key ของเจ้านี้ไหม — ใช้ข้าม agent ที่ยังไม่ได้ตั้ง key แทนที่จะให้ทั้งงานพัง
+// ทำให้เพิ่มผู้เล่น AI ตัวใหม่ได้โดยไม่ต้องมี key ครบทุกเจ้าก่อน
+export function hasApiKey(provider: string | null): boolean {
+  if (!provider) return false;
+  const entry = PROVIDERS[provider];
+  return Boolean(entry && process.env[entry.envKey]);
+}
+
+// เรียก LLM ให้ทายผล — API key อ่านจาก env เท่านั้น (ห้าม hardcode)
 export async function llmPredict(
+  provider: string,
   modelId: string,
   ctx: MatchContext,
   systemPrompt?: string | null,
   options?: { timeoutMs?: number; maxRetries?: number },
 ): Promise<LlmPredictionResult> {
-  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  if (!apiKey) {
-    throw new Error('Missing GOOGLE_GENERATIVE_AI_API_KEY ใน .env.local');
+  const entry = PROVIDERS[provider];
+  if (!entry) {
+    throw new Error(`ไม่รู้จัก provider '${provider}' (มีให้ใช้: ${providerNames().join(', ')})`);
   }
-  const google = createGoogleGenerativeAI({ apiKey });
+  const apiKey = process.env[entry.envKey];
+  if (!apiKey) {
+    throw new Error(`Missing ${entry.envKey} ใน .env.local`);
+  }
+  const model = entry.build(apiKey, modelId);
 
   const prompt = buildPrompt(ctx);
   const startedAt = Date.now();
@@ -88,7 +130,7 @@ export async function llmPredict(
   // ต้องมี timeout เสมอ — ถ้าไม่ใส่ แล้ว request ค้าง (เน็ตมีปัญหา/ปลายทางไม่ตอบ) script จะค้าง
   // ตลอดกาลโดยไม่มี error ให้ดูเลย ซึ่ง debug ไม่ได้ ยอมให้มันล้มเร็ว ๆ พร้อมข้อความดีกว่า
   const { object } = await generateObject({
-    model: google(modelId),
+    model,
     schema: predictionSchema,
     system: systemPrompt || SYSTEM_PROMPT,
     prompt,

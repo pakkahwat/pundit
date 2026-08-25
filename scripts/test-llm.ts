@@ -37,21 +37,37 @@ const fakeContext: MatchContext = {
   ],
 };
 
+// รัน: npm run db:test-llm -- <provider> <model-id>
+//   npm run db:test-llm -- google gemini-flash-lite-latest
+//   npm run db:test-llm -- groq llama-3.3-70b-versatile
+//   npm run db:test-llm -- mistral mistral-small-latest
 async function main() {
-  const modelId = process.argv[2] ?? 'gemini-flash-latest';
+  const provider = process.argv[2] ?? 'google';
+  const modelId = process.argv[3] ?? 'gemini-flash-lite-latest';
 
-  const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  const ENV_BY_PROVIDER: Record<string, string> = {
+    google: 'GOOGLE_GENERATIVE_AI_API_KEY',
+    groq: 'GROQ_API_KEY',
+    mistral: 'MISTRAL_API_KEY',
+  };
+  const envName = ENV_BY_PROVIDER[provider];
+  if (!envName) {
+    console.error(`ไม่รู้จัก provider '${provider}' (มี: ${Object.keys(ENV_BY_PROVIDER).join(', ')})`);
+    process.exit(1);
+  }
+
+  const key = process.env[envName];
   if (!key) {
-    console.error('ไม่เจอ GOOGLE_GENERATIVE_AI_API_KEY ใน .env.local');
+    console.error(`ไม่เจอ ${envName} ใน .env.local`);
     process.exit(1);
   }
   // โชว์แค่หัวกับท้ายของ key พอให้ยืนยันว่าอ่านค่าถูกตัว — ไม่ปริ้นท์เต็มลง terminal/log
   console.log(`key: ${key.slice(0, 6)}...${key.slice(-4)} (ยาว ${key.length} ตัวอักษร)`);
-  console.log(`เรียก ${modelId} (timeout 60 วินาที, retry ได้ 3 ครั้ง)...`);
+  console.log(`เรียก ${provider}/${modelId} (timeout 60 วินาที, retry ได้ 3 ครั้ง)...`);
 
   // เปิด retry ไว้พอประมาณ เพราะ free tier เจอ 503 "high demand" ชั่วคราวได้บ่อย — แต่ไม่เยอะ
   // เท่าตอนรันจริง (5 ครั้ง) เพราะตอนเทสอยากรู้ผลเร็ว ถ้าล้มก็ยังเห็นรายละเอียด error เต็ม ๆ อยู่ดี
-  const result = await llmPredict(modelId, fakeContext, null, {
+  const result = await llmPredict(provider, modelId, fakeContext, null, {
     timeoutMs: 60_000,
     maxRetries: 3,
   });

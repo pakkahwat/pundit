@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { sqlClient } from '@/db/client';
 import { runAiPredictions } from '@/lib/jobs/ai-predictions';
 import { runGenerateArticle } from '@/lib/jobs/article';
+import { runNotify } from '@/lib/jobs/notify';
 import { withCronRun } from '@/lib/jobs/cron-run';
 import { runScorePredictions } from '@/lib/jobs/score';
 import { runSyncResults } from '@/lib/jobs/sync-results';
@@ -50,6 +51,7 @@ const JOBS = {
     ),
   article: () =>
     withCronRun(sqlClient, 'generate_article', () => runGenerateArticle(sqlClient)),
+  notify: () => withCronRun(sqlClient, 'notify', () => runNotify(sqlClient)),
 } as const;
 
 type JobName = keyof typeof JOBS;

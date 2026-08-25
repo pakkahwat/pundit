@@ -4,7 +4,7 @@ import type postgres from 'postgres';
 import { db } from '@/db/client';
 import { baselinePredict } from '@/lib/ai/baseline';
 import { buildMatchContext, type MatchContext } from '@/lib/ai/context';
-import { llmPredict } from '@/lib/ai/llm';
+import { hasApiKey, llmPredict } from '@/lib/ai/llm';
 import { guardedUpsertPrediction } from '@/lib/predictions/guarded-upsert';
 import type { PredictionOutcome } from '@/lib/predictions/outcome';
 
@@ -19,6 +19,7 @@ type AgentRow = {
   user_id: string;
   agent_key: string;
   strategy: string;
+  provider: string | null;
   model_id: string | null;
   system_prompt: string | null;
 };
@@ -34,10 +35,10 @@ async function predictFor(agent: AgentRow, context: MatchContext) {
   }
 
   if (agent.strategy === 'llm') {
-    if (!agent.model_id) {
-      throw new Error(`agent ${agent.agent_key} เป็น strategy 'llm' แต่ไม่มี model_id ใน DB`);
+    if (!agent.provider || !agent.model_id) {
+      throw new Error(`agent ${agent.agent_key} เป็น strategy 'llm' แต่ไม่มี provider/model_id ใน DB`);
     }
-    const result = await llmPredict(agent.model_id, context, agent.system_prompt);
+    const result = await llmPredict(agent.provider, agent.model_id, context, agent.system_prompt);
     return {
       outcome: result.outcome as PredictionOutcome,
       prompt: `${result.prompt}\n\n--- โมเดลตอบ ---\n${result.outcome}: ${result.reasoning}`,
@@ -64,10 +65,18 @@ export async function runAiPredictions(
   const log = options.onLog ?? (() => {});
 
   const agents = await sql<AgentRow[]>`
-    select id, user_id, agent_key, strategy, model_id, system_prompt
+    select id, user_id, agent_key, strategy, provider, model_id, system_prompt
     from ai_agents where is_active = true
     order by agent_key
   `;
+
+  // ข้าม agent ที่ยังไม่ได้ตั้ง API key ของ provider นั้น — ไม่ใช่ error เพราะการเพิ่มผู้เล่น AI
+  // ตัวใหม่เข้า seed แล้วยังไม่ได้สมัคร key เป็นเรื่องปกติ ปล่อยให้ตัวที่พร้อมทำงานต่อไป
+  const usable = agents.filter((a) => a.strategy !== 'llm' || hasApiKey(a.provider));
+  const skipped = agents.filter((a) => !usable.includes(a));
+  for (const a of skipped) {
+    log(`ข้าม ${a.agent_key} — ยังไม่ได้ตั้ง API key ของ ${a.provider}`);
+  }
 
   // ดึงเฉพาะคู่ (agent, match) ที่ยังไม่มีคำทาย — ทำใน SQL ทีเดียวแทนที่จะไล่เช็คใน JS
   // ทำให้รอบถัดไปของ cron หยิบเฉพาะงานที่เหลือจริง ๆ ขึ้นมาทำต่อได้ทันที
@@ -86,12 +95,12 @@ export async function runAiPredictions(
     order by m.kickoff_at, a.id
   `;
 
-  const agentById = new Map(agents.map((a) => [a.id, a]));
+  const agentById = new Map(usable.map((a) => [a.id, a]));
   log(`เหลือให้ทาย ${pending.length} รายการ (agent x แมตช์)`);
 
   let processed = 0;
   let failed = 0;
-  let llmCalls = 0;
+  const lastCallAt = new Map<string, number>();
 
   for (const item of pending) {
     const agent = agentById.get(item.agent_id);
@@ -107,8 +116,11 @@ export async function runAiPredictions(
     const isLlm = agent.strategy === 'llm';
 
     try {
-      if (isLlm && llmCalls > 0) await sleep(LLM_DELAY_MS);
-      if (isLlm) llmCalls++;
+      if (isLlm && agent.provider) {
+        const since = Date.now() - (lastCallAt.get(agent.provider) ?? 0);
+        if (since < LLM_DELAY_MS) await sleep(LLM_DELAY_MS - since);
+        lastCallAt.set(agent.provider, Date.now());
+      }
 
       const { outcome, prompt, latencyMs } = await predictFor(agent, context);
 

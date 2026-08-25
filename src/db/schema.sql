@@ -147,6 +147,11 @@ create table leagues (
   invite_code text not null unique default replace(gen_random_uuid()::text, '-', ''),
   -- per-league scoring rule: ทายผลแพ้/ชนะ/เสมอถูก = correct แต้ม ผิด = wrong แต้ม
   scoring_config jsonb not null default '{"correct":3,"wrong":0}'::jsonb,
+  -- Discord incoming webhook ของกลุ่มนี้ (null = ปิดการแจ้งเตือน) ตั้งได้เฉพาะเจ้าของลีก
+  -- เก็บใน DB ไม่ใช่ env เพราะเป็นข้อมูลของผู้ใช้แต่ละกลุ่ม ไม่ใช่ความลับของแอป
+  -- แต่ยังถือเป็นของลับระดับหนึ่ง: ใครถือ URL นี้ก็โพสต์เข้าห้องเขาได้ จึงห้ามส่งไปฝั่ง client
+  -- ให้ใครนอกจากเจ้าของลีกเห็น
+  discord_webhook_url text,
   created_at timestamptz not null default now()
 );
 
@@ -274,6 +279,26 @@ create table api_cache (
   fetched_at timestamptz not null default now(),
   expires_at timestamptz not null
 );
+
+-- ========== การแจ้งเตือนที่ส่งไปแล้ว ==========
+-- กันไม่ให้ cron ที่รันทุก 15 นาทีโพสต์ข้อความเดิมซ้ำเข้ากลุ่มทุกรอบ — หลักการเดียวกับที่
+-- prediction_scores ใช้กันคะแนนคิดซ้ำ คือให้ unique constraint เป็นตัวบังคับ ไม่ใช่ให้โค้ดจำเอง
+--
+-- ref คือ "สิ่งที่ข้อความนี้พูดถึง" ซึ่งต่างกันไปตามชนิด เช่น
+--   deadline     -> 'md:5'                     (เตือนหนึ่งครั้งต่อแมตช์เดย์)
+--   reveal       -> 'ko:2026-08-30T19:00:00Z'  (หนึ่งครั้งต่อช่วงเวลาคิกออฟ ไม่ใช่ต่อนัด)
+--   lead_change  -> 'md5:<user id>'            (ต่อแมตช์เดย์ + คนที่ขึ้นนำ)
+--   ai_split     -> '<match id>'
+--   recap        -> 'md:5'
+create table notifications_sent (
+  id uuid primary key default gen_random_uuid(),
+  league_id uuid not null references leagues(id) on delete cascade,
+  kind text not null,
+  ref text not null,
+  sent_at timestamptz not null default now(),
+  unique (league_id, kind, ref)
+);
+create index notifications_sent_lookup_idx on notifications_sent (league_id, kind, sent_at desc);
 
 create table cron_runs (              -- แนะนำ ไม่บังคับ แต่ช่วย debug มากเวลาโปรเจกต์รันยาวทั้งฤดูกาล
   id uuid primary key default gen_random_uuid(),

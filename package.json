@@ -23,10 +23,17 @@
     "db:reset": "tsx scripts/reset-schema.ts",
     "db:test": "tsx scripts/test-connection.ts",
     "db:pull": "drizzle-kit pull",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:notify": "tsx scripts/run-notify.ts",
+    "db:migrate-notifications": "tsx scripts/migrate-notifications.ts",
+    "db:test-llm": "tsx scripts/test-llm.ts",
+    "db:list-models": "tsx scripts/list-models.ts",
+    "db:remove-ai-agent": "tsx scripts/remove-ai-agent.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.50",
+    "@ai-sdk/groq": "^4.0.31",
+    "@ai-sdk/mistral": "^4.0.33",
     "@auth/drizzle-adapter": "^1.11.3",
     "ai": "^7.0.77",
     "drizzle-orm": "^0.45.2",
