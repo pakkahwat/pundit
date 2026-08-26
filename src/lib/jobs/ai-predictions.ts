@@ -8,6 +8,7 @@ import { hasApiKey, llmPredict } from '@/lib/ai/llm';
 import { guardedUpsertPrediction } from '@/lib/predictions/guarded-upsert';
 import type { PredictionOutcome } from '@/lib/predictions/outcome';
 import { getCurrentMatchdays } from '@/lib/matches/current-matchday';
+import { withUserContextSql } from '@/db/rls';
 
 // Gemini Flash Lite บน free tier ได้ราว 15 requests/นาที (= 1 ครั้งต่อ 4 วินาที) — เว้น 5 วินาที
 // เผื่อไว้ ดีกว่าโดน 429 แล้วต้องมาไล่ retry เอง
@@ -93,21 +94,33 @@ export async function runAiPredictions(
   const seasonIds = [...matchdayBySeason.keys()];
   const matchdayValues = seasonIds.map((id) => matchdayBySeason.get(id)!);
 
-  const pending = seasonIds.length
-    ? await sql<{ agent_id: string; match_id: string }[]>`
-        select a.id as agent_id, m.id as match_id
-        from ai_agents a
-        cross join matches m
-        join unnest(${seasonIds}::uuid[], ${matchdayValues}::int[]) as cur(season_id, matchday)
-          on cur.season_id = m.season_id and cur.matchday = m.matchday
-        where a.is_active = true
-          and m.kickoff_at > now()
-          and not exists (
-            select 1 from predictions p where p.user_id = a.user_id and p.match_id = m.id
-          )
-        order by m.kickoff_at, a.id
-      `
-    : [];
+  //
+  // ถามทีละ agent ภายใต้ user context ของ agent ตัวนั้น ไม่ใช่ยิง query เดียวรวดเดียว —
+  // RLS policy ของ predictions ซ่อนคำทายของนัดที่ยังไม่คิกออฟจากทุกคนที่ไม่ใช่เจ้าของคำทาย
+  // ถ้าถามโดยไม่มี context เลย `not exists (...)` จะเป็นจริงเสมอ แปลว่า job จะคิดว่า "ยังไม่มีใครทาย"
+  // ทุกครั้ง แล้วสั่ง LLM ทายซ้ำทุกนัดทุกรอบ cron — เผาโควตาฟรีทิ้งและทับคำทายเดิมไปเรื่อย ๆ
+  // (จำนวน agent มีไม่กี่ตัว การยิงทีละตัวจึงถูกกว่าการเสีย LLM call มหาศาลมาก)
+  const pending: { agent_id: string; match_id: string; ko: string }[] = [];
+  if (seasonIds.length) {
+    for (const agent of usable) {
+      const rows = await withUserContextSql(sql, agent.user_id, (tx) =>
+        tx<{ match_id: string; ko: string }[]>`
+          select m.id as match_id, m.kickoff_at::text as ko
+          from matches m
+          join unnest(${seasonIds}::uuid[], ${matchdayValues}::int[]) as cur(season_id, matchday)
+            on cur.season_id = m.season_id and cur.matchday = m.matchday
+          where m.kickoff_at > now()
+            and not exists (
+              select 1 from predictions p
+              where p.user_id = ${agent.user_id}::uuid and p.match_id = m.id
+            )
+        `,
+      );
+      for (const r of rows) pending.push({ agent_id: agent.id, match_id: r.match_id, ko: r.ko });
+    }
+    // เรียงตามเวลาคิกออฟเหมือนเดิม เพื่อให้นัดที่ใกล้ปิดรับที่สุดได้ทายก่อนถ้าทำไม่ทันในรอบเดียว
+    pending.sort((a, b) => a.ko.localeCompare(b.ko) || a.agent_id.localeCompare(b.agent_id));
+  }
 
   const agentById = new Map(usable.map((a) => [a.id, a]));
   log(`เหลือให้ทาย ${pending.length} รายการ (agent x แมตช์)`);

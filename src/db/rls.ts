@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import type postgres from 'postgres';
 
 import { db } from './client';
 
@@ -17,4 +18,25 @@ export async function withUserContext<T>(userId: string, fn: (tx: Tx) => Promise
     await tx.execute(sql`select set_config('app.current_user_id', ${userId}, true)`);
     return fn(tx);
   });
+}
+
+// เวอร์ชันเดียวกันสำหรับ job ที่ถือ client ของ postgres.js เอง (cron/scripts) ไม่ได้ใช้ drizzle
+//
+// จำเป็นเพราะ RLS policy ของ predictions ซ่อน "คำทายของนัดที่ยังไม่คิกออฟ" จากทุกคนที่ไม่ใช่
+// เจ้าของคำทาย — ซึ่งรวมถึง job ที่รันโดยไม่มี user context ด้วย ผลคือ query แบบ
+// "คนนี้ทายนัดนี้ไปหรือยัง" จะตอบว่า "ยัง" เสมอ ทั้งที่ทายไปแล้ว (เจอมาแล้วสองที่: job ให้ AI ทาย
+// กับกติกาเตือนก่อนปิดรับ) จึงต้องถามแทนทีละคนภายใต้ context ของคนนั้น
+//
+// ห่อค่าที่ได้ไว้ในอ็อบเจกต์ก่อนคืนออกจาก sql.begin เพราะ postgres.js มีพฤติกรรมพิเศษกับ
+// อาร์เรย์ที่คืนจาก transaction (มันจะไล่ await ให้เอง) ซึ่งทำให้ type ของผลลัพธ์เพี้ยน
+export async function withUserContextSql<T>(
+  client: postgres.Sql,
+  userId: string,
+  fn: (tx: postgres.TransactionSql) => Promise<T>,
+): Promise<T> {
+  const wrapped = await client.begin(async (tx) => {
+    await tx`select set_config('app.current_user_id', ${userId}, true)`;
+    return { value: await fn(tx) };
+  });
+  return (wrapped as unknown as { value: T }).value;
 }

@@ -2,6 +2,7 @@ import type postgres from 'postgres';
 
 import { COLOR, postToDiscord, type DiscordMessage } from '@/lib/notify/discord';
 import { getCurrentMatchdays } from '@/lib/matches/current-matchday';
+import { withUserContextSql } from '@/db/rls';
 
 // ── แจ้งเตือนเข้า Discord ของแต่ละลีก ─────────────────────────────────────────
 //
@@ -44,22 +45,33 @@ async function deadlineRule(sql: postgres.Sql, league: League): Promise<Candidat
   if (next.hours_left < 1 || next.hours_left > 5) return [];
 
   // ใครยังทายไม่ครบบ้าง — นับเฉพาะคน ไม่นับ AI (AI มี cron ของตัวเองอยู่แล้ว)
-  const slackers = await sql<{ name: string; missing: number }[]>`
-    select ${sql.unsafe(NAME)} as name,
-           count(*) filter (where p.id is null)::int as missing
+  //
+  // ต้องนับทีละคนภายใต้ user context ของคนนั้น ไม่ใช่ query เดียวรวมทุกคน — RLS policy ของ
+  // predictions ซ่อนคำทายของนัดที่ยังไม่คิกออฟจากทุกคนที่ไม่ใช่เจ้าของ ซึ่งรวมถึง job ตัวนี้ด้วย
+  // ถ้านับรวดเดียวโดยไม่มี context ทุกคนจะกลายเป็น "ยังไม่ทาย" หมด แล้วเราจะไปเตือนคนที่ทายครบ
+  // ไปแล้วทุกแมตช์เดย์ ซึ่งแย่กว่าไม่เตือนเลย (สมาชิกลีกมีไม่กี่คน ยิงทีละคนจึงไม่หนัก)
+  const humans = await sql<{ user_id: string; name: string }[]>`
+    select lm.user_id, ${sql.unsafe(NAME)} as name
     from league_members lm
     join users u on u.id = lm.user_id
-    cross join matches m
-    left join predictions p on p.match_id = m.id and p.user_id = lm.user_id
-    where lm.league_id = ${league.id}
-      and u.player_kind = 'human'
-      and m.season_id = ${league.season_id}
-      and m.matchday = ${md}
-      and m.kickoff_at > now()
-    group by lm.user_id, u.display_name, u.name
-    having count(*) filter (where p.id is null) > 0
-    order by 1
+    where lm.league_id = ${league.id} and u.player_kind = 'human'
+    order by 2
   `;
+
+  const slackers: { name: string; missing: number }[] = [];
+  for (const h of humans) {
+    const [row] = await withUserContextSql(sql, h.user_id, (tx) =>
+      tx<{ missing: number }[]>`
+        select count(*) filter (where p.id is null)::int as missing
+        from matches m
+        left join predictions p on p.match_id = m.id and p.user_id = ${h.user_id}::uuid
+        where m.season_id = ${league.season_id}
+          and m.matchday = ${md}
+          and m.kickoff_at > now()
+      `,
+    );
+    if ((row?.missing ?? 0) > 0) slackers.push({ name: h.name, missing: row.missing });
+  }
   if (slackers.length === 0) return [];
 
   const hours = Math.round(next.hours_left);
