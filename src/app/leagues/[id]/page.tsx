@@ -18,7 +18,7 @@ import { LeagueNav } from '@/components/league-nav';
 import { DiscordForm } from './discord-form';
 import { StandingsTable } from '@/components/standings-table';
 import { db } from '@/db/client';
-import { leagueMembers, leagues, seasons, users } from '@/db/schema';
+import { aiAgents, leagueMembers, leagues, seasons, users } from '@/db/schema';
 import { PlayerAvatar } from '@/components/player-avatar';
 import { displayNameSql, realNameHint } from '@/lib/display-name';
 import { competitionLabel } from '@/lib/football/competitions';
@@ -62,9 +62,13 @@ export default async function LeaguePage({ params }: { params: Promise<{ id: str
       email: users.email,
       role: leagueMembers.role,
       playerKind: users.playerKind,
+      agentKey: aiAgents.agentKey,
     })
     .from(leagueMembers)
     .innerJoin(users, eq(leagueMembers.userId, users.id))
+    // left join เพราะสมาชิกส่วนใหญ่เป็นคน ไม่มีแถวใน ai_agents — เอามาเพื่อรู้ว่า AI ตัวไหน
+    // จะได้หยิบไอคอนประจำตัวของมันมาแสดง
+    .leftJoin(aiAgents, eq(aiAgents.userId, leagueMembers.userId))
     .where(eq(leagueMembers.leagueId, id));
 
   const pending = await pendingPredictionCount(
@@ -134,6 +138,7 @@ export default async function LeaguePage({ params }: { params: Promise<{ id: str
                       image={m.image}
                       name={m.name}
                       isAi={m.playerKind === 'ai'}
+                      agentKey={m.agentKey}
                     />
                     {/* เอาเมาส์ชี้แล้วเฉลยว่าชื่อเล่นนี้คือใคร — cursor-help เป็นตัวบอกว่ามีอะไร
                         ให้ชี้ ไม่งั้นไม่มีใครรู้ว่าต้องเอาเมาส์ไปวาง */}

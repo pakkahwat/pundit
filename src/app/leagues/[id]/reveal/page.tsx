@@ -18,6 +18,7 @@ import { TeamCrest } from "@/components/team-crest";
 import { db } from "@/db/client";
 import { withUserContext } from "@/db/rls";
 import {
+  aiAgents,
   leagueMembers,
   leagues,
   matches,
@@ -128,9 +129,13 @@ export default async function RevealPage({
       googleName: users.name,
       image: users.image,
       playerKind: users.playerKind,
+      agentKey: aiAgents.agentKey,
     })
     .from(leagueMembers)
     .innerJoin(users, eq(users.id, leagueMembers.userId))
+    // left join เพราะสมาชิกส่วนใหญ่เป็นคน ไม่มีแถวใน ai_agents — เอามาเพื่อรู้ว่าเป็น AI ตัวไหน
+    // จะได้หยิบไอคอนประจำตัวของมันมาแสดงแทนวงกลมตัวอักษร
+    .leftJoin(aiAgents, eq(aiAgents.userId, leagueMembers.userId))
     .where(eq(leagueMembers.leagueId, id))
     // เรียงคนจริงขึ้นก่อน AI แล้วค่อยเรียงตามชื่อ ให้ลำดับคงที่ทุกครั้งที่โหลด
     .orderBy(asc(users.playerKind), asc(displayNameSql));
@@ -342,6 +347,7 @@ export default async function RevealPage({
                             image={member.image}
                             name={member.name}
                             isAi={member.playerKind === "ai"}
+                            agentKey={member.agentKey}
                             size={24}
                           />
                           <span

@@ -3,6 +3,8 @@
 import Image from 'next/image';
 import { useState } from 'react';
 
+import { AiIcon } from './ai-icon';
+
 // รูปโปรไฟล์ของผู้เล่น — ใช้รูปจากบัญชี Google ที่ Auth.js เก็บไว้ให้ตอนล็อกอิน (users.image)
 //
 // มีไว้เพราะพอเปิดให้ตั้งชื่อเองได้ ชื่อในลีกก็ไม่ได้บอกแล้วว่าใครเป็นใคร (เพื่อนตั้งชื่อมั่ว ๆ กันหมด)
@@ -18,15 +20,21 @@ export function PlayerAvatar({
   image,
   name,
   isAi = false,
+  agentKey = null,
   size = 28,
 }: {
   image: string | null;
   name: string | null;
   isAi?: boolean;
+  agentKey?: string | null;
   size?: number;
 }) {
   const [broken, setBroken] = useState(false);
   const box = { width: size, height: size };
+
+  // ผู้เล่น AI ได้ไอคอนประจำตัวของตัวเอง ไม่ใช้ตัวอักษรแรกของชื่อ — ชื่อไทยของ AI หลายตัว
+  // ขึ้นต้นด้วยตัวอักษรที่หน้าตาคล้ายกันจนแยกไม่ออก (ดูเหตุผลเต็มใน ai-icon.tsx)
+  if (isAi) return <AiIcon agentKey={agentKey} size={size} />;
 
   if (image && !broken) {
     return (

@@ -17,6 +17,7 @@ type LeaderboardRow = {
   display_name: string | null;
   google_name: string | null;
   image: string | null;
+  agent_key: string | null;
   player_kind: 'human' | 'ai';
   total_points: number;
   scored_matches: number;
@@ -61,11 +62,13 @@ export default async function LeaderboardPage({ params }: { params: Promise<{ id
       u.display_name,
       u.name as google_name,
       u.image,
+      ag.agent_key,
       u.player_kind,
       coalesce(scores.total_points, 0)::int as total_points,
       coalesce(scores.scored_matches, 0)::int as scored_matches
     from league_members lm
     join users u on u.id = lm.user_id
+    left join ai_agents ag on ag.user_id = lm.user_id
     left join (
       select p.user_id, sum(ps.points_awarded) as total_points, count(*) as scored_matches
       from prediction_scores ps
@@ -112,6 +115,7 @@ export default async function LeaderboardPage({ params }: { params: Promise<{ id
                     image={r.image}
                     name={r.name}
                     isAi={r.player_kind === 'ai'}
+                    agentKey={r.agent_key}
                   />
                   <span
                     title={realNameHint(r.display_name, r.google_name)}
