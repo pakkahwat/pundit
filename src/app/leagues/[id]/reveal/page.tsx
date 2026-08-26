@@ -12,6 +12,7 @@ import {
   PageShell,
 } from "@/components/ui";
 import { LeagueNav } from "@/components/league-nav";
+import { RevealList } from "@/components/reveal-list";
 import { TeamCrest } from "@/components/team-crest";
 import { db } from "@/db/client";
 import { withUserContext } from "@/db/rls";
@@ -179,6 +180,10 @@ export default async function RevealPage({
 
   const pending = await pendingPredictionCount(league.seasonId, currentMatchday, userId);
 
+  // แมตช์เดย์ที่มีไม่กี่คู่ (ต้นฤดูกาล หรือเหลือนัดตกค้าง) กางไว้เลยจะอ่านง่ายกว่า ไม่ต้องกดเพิ่ม
+  // พอเกิน 3 คู่ค่อยหุบทั้งหมด เพราะจุดประสงค์ของการหุบคือให้เห็นทั้งแมตช์เดย์ในจอเดียว
+  const defaultOpen = visibleMatches.length <= 3;
+
   return (
     <PageShell width="lg">
       <PageHeader
@@ -191,7 +196,7 @@ export default async function RevealPage({
       {visibleMatches.length === 0 ? (
         <EmptyState>ยังไม่มีคำทายในแมตช์เดย์นี้</EmptyState>
       ) : (
-        <ul className="flex flex-col gap-3">
+        <RevealList>
           {visibleMatches.map((m) => {
             const locked = isMatchLocked(m.kickoffAt);
             const predsByUser = predictionsByMatch.get(m.id);
@@ -207,31 +212,101 @@ export default async function RevealPage({
                   : "DRAW"
               : null;
 
+            // สรุปที่เห็นตอนหุบ — ตั้งใจให้ตอบคำถามที่คนเปิดหน้านี้มาถามบ่อยที่สุดได้เลย
+            // โดยไม่ต้องกาง: "ของเราถูกไหม" และ "คนอื่นถูกกันกี่คน"
+            const revealed = locked ? Array.from(predsByUser?.values() ?? []) : [];
+            const correctCount =
+              actualOutcome == null
+                ? 0
+                : revealed.filter((p) => p.outcome === actualOutcome).length;
+            const myOutcome = locked
+              ? predsByUser?.get(userId)?.outcome
+              : myPendingByMatch.get(m.id);
+            const myLabel = myOutcome
+              ? outcomeLabel(myOutcome, m.homeTeamName, m.awayTeamName)
+              : null;
+
             return (
               <li key={m.id}>
                 <Card padded={false}>
-                  <div className="flex flex-col gap-2 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-                    <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 font-medium text-foreground">
-                      <span className="flex min-w-0 items-center gap-2">
-                        <TeamCrest src={m.homeCrest} size={20} />
-                        <span>{m.homeTeamName}</span>
-                      </span>
-                      <span className="shrink-0 text-muted">vs</span>
-                      <span className="flex min-w-0 items-center gap-2">
-                        <TeamCrest src={m.awayCrest} size={20} />
-                        <span>{m.awayTeamName}</span>
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-xs text-muted">
-                      {finished ? (
-                        <span className="font-semibold text-foreground">
-                          {m.homeScore}-{m.awayScore}
+                  {/* หุบ/กางด้วย <details> ของเบราว์เซอร์เอง ไม่ใช่ state ใน React — แมตช์เดย์หนึ่ง
+                      มีได้ถึง 10 คู่ คูณจำนวนผู้เล่นแล้วยาวเป็นร้อยแถว การหุบไว้ก่อนทำให้เห็น
+                      ทั้งแมตช์เดย์ในจอเดียว ที่เลือก <details> เพราะได้ปุ่มที่กดด้วยคีย์บอร์ดได้
+                      และ screen reader อ่านสถานะกาง/หุบถูกต้องมาให้ฟรี ไม่ต้องเขียน aria เอง
+                      และไม่ต้องส่ง JS ไปฝั่ง browser เลย */}
+                  <details className="group" open={defaultOpen}>
+                    <summary className="flex cursor-pointer list-none items-start gap-3 px-4 py-3 transition-colors hover:bg-surface-hover group-open:border-b group-open:border-border [&::-webkit-details-marker]:hidden">
+                      <span className="flex min-w-0 flex-1 flex-col gap-1">
+                        <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 font-medium text-foreground">
+                          <span className="flex min-w-0 items-center gap-2">
+                            <TeamCrest src={m.homeCrest} size={20} />
+                            <span>{m.homeTeamName}</span>
+                          </span>
+                          <span className="shrink-0 text-muted">vs</span>
+                          <span className="flex min-w-0 items-center gap-2">
+                            <TeamCrest src={m.awayCrest} size={20} />
+                            <span>{m.awayTeamName}</span>
+                          </span>
                         </span>
-                      ) : (
-                        formatKickoff(m.kickoffAt)
-                      )}
-                    </span>
-                  </div>
+
+                        {/* บรรทัดสรุปตอนหุบ — ตั้งใจให้ตอบคำถามที่คนเปิดหน้านี้มาถามบ่อยที่สุด
+                            ได้เลยโดยไม่ต้องกาง: "ของเราถูกไหม" กับ "คนอื่นถูกกันกี่คน"
+                            ถ้าไม่มีบรรทัดนี้ การหุบจะกลายเป็นแค่การซ่อนของ ต้องกดกางทุกใบอยู่ดี */}
+                        <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+                          {finished ? (
+                            <span className="font-semibold text-foreground">
+                              {m.homeScore}-{m.awayScore}
+                            </span>
+                          ) : (
+                            <span>{formatKickoff(m.kickoffAt)}</span>
+                          )}
+                          <span aria-hidden>·</span>
+                          {!locked ? (
+                            <span>
+                              คุณทาย: <span className="text-foreground">{myLabel}</span> ·
+                              เปิดเผยหลังเริ่มแข่ง
+                            </span>
+                          ) : (
+                            <>
+                              {myOutcome == null ? (
+                                <span>คุณไม่ได้ทาย</span>
+                              ) : actualOutcome == null ? (
+                                <span>
+                                  คุณทาย: <span className="text-foreground">{myLabel}</span>
+                                </span>
+                              ) : myOutcome === actualOutcome ? (
+                                <span className="font-medium text-success">คุณทายถูก</span>
+                              ) : (
+                                <span className="font-medium text-danger">คุณทายผิด</span>
+                              )}
+                              <span aria-hidden>·</span>
+                              <span>
+                                {actualOutcome == null
+                                  ? `ทายไว้ ${revealed.length} คน`
+                                  : `ถูก ${correctCount} จาก ${revealed.length}`}
+                              </span>
+                            </>
+                          )}
+                        </span>
+                      </span>
+
+                      {/* ลูกศรบอกทิศ กางแล้วชี้ขึ้น — ไม่ใช้สามเหลี่ยมเริ่มต้นของเบราว์เซอร์
+                          เพราะหน้าตาต่างกันคนละแบบในแต่ละเบราว์เซอร์ */}
+                      <svg
+                        viewBox="0 0 16 16"
+                        aria-hidden
+                        className="mt-1 h-4 w-4 shrink-0 text-muted transition-transform group-open:rotate-180"
+                      >
+                        <path
+                          d="M4 6l4 4 4-4"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.75"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </summary>
 
                   {/* แสดงสมาชิกทุกคนเป็นแถวเสมอ ทั้งก่อนและหลังเปิดเผย เพื่อให้เห็นว่ามีใครลงแข่ง
                       บ้างและผลจะมาโผล่ตรงไหน — ก่อนล็อกค่าทุกช่องเป็น "เผยหลังเริ่มแข่ง" เหมือนกัน
@@ -290,11 +365,12 @@ export default async function RevealPage({
                       );
                     })}
                   </ul>
+                  </details>
                 </Card>
               </li>
             );
           })}
-        </ul>
+        </RevealList>
       )}
     </PageShell>
   );
