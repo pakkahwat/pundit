@@ -1,14 +1,14 @@
-import { sql as sqlTag } from 'drizzle-orm';
-import type postgres from 'postgres';
+import { sql as sqlTag } from "drizzle-orm";
+import type postgres from "postgres";
 
-import { db } from '@/db/client';
-import { baselinePredict } from '@/lib/ai/baseline';
-import { buildMatchContext, type MatchContext } from '@/lib/ai/context';
-import { hasApiKey, llmPredict } from '@/lib/ai/llm';
-import { guardedUpsertPrediction } from '@/lib/predictions/guarded-upsert';
-import type { PredictionOutcome } from '@/lib/predictions/outcome';
-import { getCurrentMatchdays } from '@/lib/matches/current-matchday';
-import { withUserContextSql } from '@/db/rls';
+import { db } from "@/db/client";
+import { baselinePredict } from "@/lib/ai/baseline";
+import { buildMatchContext, type MatchContext } from "@/lib/ai/context";
+import { hasApiKey, llmPredict } from "@/lib/ai/llm";
+import { guardedUpsertPrediction } from "@/lib/predictions/guarded-upsert";
+import type { PredictionOutcome } from "@/lib/predictions/outcome";
+import { getCurrentMatchdays } from "@/lib/matches/current-matchday";
+import { withUserContextSql } from "@/db/rls";
 
 // Gemini Flash Lite บน free tier ได้ราว 15 requests/นาที (= 1 ครั้งต่อ 4 วินาที) — เว้น 5 วินาที
 // เผื่อไว้ ดีกว่าโดน 429 แล้วต้องมาไล่ retry เอง
@@ -27,7 +27,7 @@ type AgentRow = {
 };
 
 async function predictFor(agent: AgentRow, context: MatchContext) {
-  if (agent.strategy === 'static_form_based') {
+  if (agent.strategy === "static_form_based") {
     const { outcome, reasoning } = baselinePredict(context);
     return {
       outcome,
@@ -37,11 +37,18 @@ async function predictFor(agent: AgentRow, context: MatchContext) {
     };
   }
 
-  if (agent.strategy === 'llm') {
+  if (agent.strategy === "llm") {
     if (!agent.provider || !agent.model_id) {
-      throw new Error(`agent ${agent.agent_key} เป็น strategy 'llm' แต่ไม่มี provider/model_id ใน DB`);
+      throw new Error(
+        `agent ${agent.agent_key} เป็น strategy 'llm' แต่ไม่มี provider/model_id ใน DB`,
+      );
     }
-    const result = await llmPredict(agent.provider, agent.model_id, context, agent.system_prompt);
+    const result = await llmPredict(
+      agent.provider,
+      agent.model_id,
+      context,
+      agent.system_prompt,
+    );
     return {
       outcome: result.outcome as PredictionOutcome,
       prompt: `${result.prompt}\n\n--- โมเดลตอบ ---\n${result.outcome}: ${result.reasoning}`,
@@ -50,7 +57,9 @@ async function predictFor(agent: AgentRow, context: MatchContext) {
     };
   }
 
-  throw new Error(`ไม่รู้จัก strategy '${agent.strategy}' ของ agent ${agent.agent_key}`);
+  throw new Error(
+    `ไม่รู้จัก strategy '${agent.strategy}' ของ agent ${agent.agent_key}`,
+  );
 }
 
 // ให้ AI ทายผลแมตช์ที่ยังไม่ล็อกและ "ยังไม่เคยทาย" — เขียนผ่าน guardedUpsertPrediction เส้นทาง
@@ -76,7 +85,9 @@ export async function runAiPredictions(
 
   // ข้าม agent ที่ยังไม่ได้ตั้ง API key ของ provider นั้น — ไม่ใช่ error เพราะการเพิ่มผู้เล่น AI
   // ตัวใหม่เข้า seed แล้วยังไม่ได้สมัคร key เป็นเรื่องปกติ ปล่อยให้ตัวที่พร้อมทำงานต่อไป
-  const usable = agents.filter((a) => a.strategy !== 'llm' || hasApiKey(a.provider));
+  const usable = agents.filter(
+    (a) => a.strategy !== "llm" || hasApiKey(a.provider),
+  );
   const skipped = agents.filter((a) => !usable.includes(a));
   for (const a of skipped) {
     log(`ข้าม ${a.agent_key} — ยังไม่ได้ตั้ง API key ของ ${a.provider}`);
@@ -88,7 +99,9 @@ export async function runAiPredictions(
   // จำกัดที่ "แมตช์เดย์ปัจจุบัน" ของแต่ละฤดูกาล โดยคำนวณเองจากโปรแกรมแข่ง ไม่ใช่อ่าน
   // seasons.current_matchday (ดู lib/matches/current-matchday.ts) — ถ้าเชื่อค่าจากผู้ให้บริการ
   // AI จะข้ามนัดที่ยังทายได้ของแมตช์เดย์ปัจจุบันไปทายแมตช์เดย์ถัดไปแทน กลายเป็นว่าคนทายแต่ AI ไม่ทาย
-  const activeSeasons = await sql<{ id: string }[]>`select id from seasons where is_active = true`;
+  const activeSeasons = await sql<
+    { id: string }[]
+  >`select id from seasons where is_active = true`;
   const matchdayBySeason = await getCurrentMatchdays(
     activeSeasons.map((s) => s.id),
     sql,
@@ -105,8 +118,11 @@ export async function runAiPredictions(
   const pending: { agent_id: string; match_id: string; ko: string }[] = [];
   if (seasonIds.length) {
     for (const agent of usable) {
-      const rows = await withUserContextSql(sql, agent.user_id, (tx) =>
-        tx<{ match_id: string; ko: string }[]>`
+      const rows = await withUserContextSql(
+        sql,
+        agent.user_id,
+        (tx) =>
+          tx<{ match_id: string; ko: string }[]>`
           select m.id as match_id, m.kickoff_at::text as ko
           from matches m
           join unnest(${seasonIds}::uuid[], ${matchdayValues}::int[]) as cur(season_id, matchday)
@@ -118,10 +134,14 @@ export async function runAiPredictions(
             )
         `,
       );
-      for (const r of rows) pending.push({ agent_id: agent.id, match_id: r.match_id, ko: r.ko });
+      for (const r of rows)
+        pending.push({ agent_id: agent.id, match_id: r.match_id, ko: r.ko });
     }
     // เรียงตามเวลาคิกออฟเหมือนเดิม เพื่อให้นัดที่ใกล้ปิดรับที่สุดได้ทายก่อนถ้าทำไม่ทันในรอบเดียว
-    pending.sort((a, b) => a.ko.localeCompare(b.ko) || a.agent_id.localeCompare(b.agent_id));
+    pending.sort(
+      (a, b) =>
+        a.ko.localeCompare(b.ko) || a.agent_id.localeCompare(b.agent_id),
+    );
   }
 
   const agentById = new Map(usable.map((a) => [a.id, a]));
@@ -137,12 +157,12 @@ export async function runAiPredictions(
 
     // เผื่อเวลาไว้ 1 รอบก่อนถึง deadline — หยุดก่อนโดนตัดกลางคัน จะได้บันทึก cron_runs ทัน
     if (Date.now() - startedAt > deadlineMs - LLM_DELAY_MS - 15_000) {
-      log('ใกล้หมดเวลาของรอบนี้ หยุดไว้ก่อน ให้ cron รอบถัดไปทำต่อ');
+      log("ใกล้หมดเวลาของรอบนี้ หยุดไว้ก่อน ให้ cron รอบถัดไปทำต่อ");
       break;
     }
 
     const context = await buildMatchContext(sql, item.match_id);
-    const isLlm = agent.strategy === 'llm';
+    const isLlm = agent.strategy === "llm";
 
     try {
       if (isLlm && agent.provider) {
@@ -151,11 +171,21 @@ export async function runAiPredictions(
         lastCallAt.set(agent.provider, Date.now());
       }
 
-      const { outcome, prompt, reasoning, latencyMs } = await predictFor(agent, context);
+      const { outcome, prompt, reasoning, latencyMs } = await predictFor(
+        agent,
+        context,
+      );
 
       const rows = await db.transaction(async (tx) => {
-        await tx.execute(sqlTag`select set_config('app.current_user_id', ${agent.user_id}, true)`);
-        return guardedUpsertPrediction(tx, agent.user_id, item.match_id, outcome);
+        await tx.execute(
+          sqlTag`select set_config('app.current_user_id', ${agent.user_id}, true)`,
+        );
+        return guardedUpsertPrediction(
+          tx,
+          agent.user_id,
+          item.match_id,
+          outcome,
+        );
       });
       const predictionId = rows[0]?.id ?? null;
 
@@ -172,11 +202,13 @@ export async function runAiPredictions(
       processed++;
       log(
         `  ${agent.agent_key}: ${context.homeTeam} vs ${context.awayTeam} -> ${outcome}` +
-          (latencyMs ? ` (${latencyMs}ms)` : ''),
+          (latencyMs ? ` (${latencyMs}ms)` : ""),
       );
     } catch (err) {
       failed++;
-      log(`  ${agent.agent_key}: แมตช์ ${item.match_id} ล้มเหลว — ${String(err)}`);
+      log(
+        `  ${agent.agent_key}: แมตช์ ${item.match_id} ล้มเหลว — ${String(err)}`,
+      );
       // เก็บ error ไว้เพื่อแยก "ทายผิด" ออกจาก "ไม่ได้ทายเพราะระบบพัง" — สำคัญกับคำถามวิจัย
       await sql`
         insert into ai_prediction_logs (

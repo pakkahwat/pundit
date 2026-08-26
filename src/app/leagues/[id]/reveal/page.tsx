@@ -30,7 +30,7 @@ import { displayNameSql, realNameHint } from "@/lib/display-name";
 import { formatKickoff, isMatchLocked } from "@/lib/match-time";
 import { pendingPredictionCount } from "@/lib/leagues/pending";
 import { outcomeLabel } from "@/lib/predictions/outcome";
-import { getCurrentMatchday } from '@/lib/matches/current-matchday';
+import { getCurrentMatchday } from "@/lib/matches/current-matchday";
 
 export default async function RevealPage({
   params,
@@ -197,7 +197,11 @@ export default async function RevealPage({
       : myPendingByMatch.has(m.id),
   );
 
-  const pending = await pendingPredictionCount(league.seasonId, currentMatchday, userId);
+  const pending = await pendingPredictionCount(
+    league.seasonId,
+    currentMatchday,
+    userId,
+  );
 
   // แมตช์เดย์ที่มีไม่กี่คู่ (ต้นฤดูกาล หรือเหลือนัดตกค้าง) กางไว้เลยจะอ่านง่ายกว่า ไม่ต้องกดเพิ่ม
   // พอเกิน 3 คู่ค่อยหุบทั้งหมด เพราะจุดประสงค์ของการหุบคือให้เห็นทั้งแมตช์เดย์ในจอเดียว
@@ -233,7 +237,9 @@ export default async function RevealPage({
 
             // สรุปที่เห็นตอนหุบ — ตั้งใจให้ตอบคำถามที่คนเปิดหน้านี้มาถามบ่อยที่สุดได้เลย
             // โดยไม่ต้องกาง: "ของเราถูกไหม" และ "คนอื่นถูกกันกี่คน"
-            const revealed = locked ? Array.from(predsByUser?.values() ?? []) : [];
+            const revealed = locked
+              ? Array.from(predsByUser?.values() ?? [])
+              : [];
             const correctCount =
               actualOutcome == null
                 ? 0
@@ -282,8 +288,9 @@ export default async function RevealPage({
                           <span aria-hidden>·</span>
                           {!locked ? (
                             <span>
-                              คุณทาย: <span className="text-foreground">{myLabel}</span> ·
-                              เปิดเผยหลังเริ่มแข่ง
+                              คุณทาย:{" "}
+                              <span className="text-foreground">{myLabel}</span>{" "}
+                              · เปิดเผยหลังเริ่มแข่ง
                             </span>
                           ) : (
                             <>
@@ -291,12 +298,19 @@ export default async function RevealPage({
                                 <span>คุณไม่ได้ทาย</span>
                               ) : actualOutcome == null ? (
                                 <span>
-                                  คุณทาย: <span className="text-foreground">{myLabel}</span>
+                                  คุณทาย:{" "}
+                                  <span className="text-foreground">
+                                    {myLabel}
+                                  </span>
                                 </span>
                               ) : myOutcome === actualOutcome ? (
-                                <span className="font-medium text-success">คุณทายถูก</span>
+                                <span className="font-medium text-success">
+                                  คุณทายถูก
+                                </span>
                               ) : (
-                                <span className="font-medium text-danger">คุณทายผิด</span>
+                                <span className="font-medium text-danger">
+                                  คุณทายผิด
+                                </span>
                               )}
                               <span aria-hidden>·</span>
                               <span>
@@ -327,99 +341,107 @@ export default async function RevealPage({
                       </svg>
                     </summary>
 
-                  {/* แสดงสมาชิกทุกคนเป็นแถวเสมอ ทั้งก่อนและหลังเปิดเผย เพื่อให้เห็นว่ามีใครลงแข่ง
+                    {/* แสดงสมาชิกทุกคนเป็นแถวเสมอ ทั้งก่อนและหลังเปิดเผย เพื่อให้เห็นว่ามีใครลงแข่ง
                       บ้างและผลจะมาโผล่ตรงไหน — ก่อนล็อกค่าทุกช่องเป็น "เผยหลังเริ่มแข่ง" เหมือนกัน
                       หมด ไม่บอกด้วยซ้ำว่าใครทายไปแล้วหรือยัง เพราะ RLS กันไม่ให้เรารู้ตั้งแต่ระดับ
                       database (และไม่ควรรู้ เพราะไม่เกี่ยวกับเรา) */}
-                  {/* กันเข้าใจผิด: แถวพวกนี้คือ "รายชื่อสมาชิกลีก" ไม่ใช่ "คนที่ทายแล้ว" — ก่อนคิกออฟ
+                    {/* กันเข้าใจผิด: แถวพวกนี้คือ "รายชื่อสมาชิกลีก" ไม่ใช่ "คนที่ทายแล้ว" — ก่อนคิกออฟ
                       เราไม่รู้ด้วยซ้ำว่าใครทายไปแล้วบ้าง เพราะ RLS ปิดไว้ที่ระดับฐานข้อมูล
                       (ตั้งใจให้เป็นแบบนี้ จะได้ไม่มีใครแอบดูของใครได้เลย) ถ้าไม่เขียนบอกไว้
                       คนอ่านจะนึกว่าทุกคนในลิสต์ทายมาแล้วทั้งหมด */}
-                  {!locked && (
-                    <p className="border-b border-border px-4 py-2.5 text-xs text-muted">
-                      นี่คือรายชื่อสมาชิกทั้งลีก ยังไม่ได้แปลว่าทุกคนทายแล้ว — ก่อนคิกออฟระบบยังไม่รู้ว่าใครทายไปแล้วบ้าง
-                    </p>
-                  )}
+                    {!locked && (
+                      <p className="border-b border-border px-4 py-2.5 text-xs text-muted">
+                        นี่คือรายชื่อสมาชิกทั้งลีก ยังไม่ได้แปลว่าทุกคนทายแล้ว —
+                        ก่อนคิกออฟระบบยังไม่รู้ว่าใครทายไปแล้วบ้าง
+                      </p>
+                    )}
 
-                  <ul className="divide-y divide-border">
-                    {memberRows.map((member) => {
-                      const pred = predsByUser?.get(member.userId);
-                      const correct =
-                        actualOutcome != null &&
-                        pred?.outcome === actualOutcome;
+                    <ul className="divide-y divide-border">
+                      {memberRows.map((member) => {
+                        const pred = predsByUser?.get(member.userId);
+                        const correct =
+                          actualOutcome != null &&
+                          pred?.outcome === actualOutcome;
 
-                      return (
-                        <li
-                          key={member.userId}
-                          className="flex items-center gap-3 p-4"
-                        >
-                          <PlayerAvatar
-                            image={member.image}
-                            name={member.name}
-                            isAi={member.playerKind === "ai"}
-                            agentKey={member.agentKey}
-                            size={24}
-                          />
-                          <span
-                            title={
-                              member.userId === userId
-                                ? undefined
-                                : realNameHint(member.displayName, member.googleName)
-                            }
-                            className={`min-w-0 flex-1 break-words text-sm text-muted ${
-                              member.userId !== userId &&
-                              realNameHint(member.displayName, member.googleName)
-                                ? "cursor-help"
-                                : ""
-                            }`}
+                        return (
+                          <li
+                            key={member.userId}
+                            className="flex items-center gap-3 p-4"
                           >
-                            คำทายของ
-                            {member.userId === userId
-                              ? "คุณ"
-                              : " " + member.name}
-                            {member.playerKind === "ai" && (
-                              <span className="ml-2">
-                                <Badge tone="accent">AI</Badge>
-                              </span>
-                            )}
-                          </span>
-
-                          {!locked ? (
-                            <span className="shrink-0 text-sm text-muted">
-                              เปิดเผยหลังเริ่มแข่ง
-                            </span>
-                          ) : !pred ? (
-                            <span className="shrink-0 text-sm text-muted">
-                              ไม่ได้ทาย
-                            </span>
-                          ) : (
-                            <span className="flex min-w-0 flex-col items-end gap-1 text-right">
-                              <span
-                                className={`text-sm ${
-                                  actualOutcome == null
-                                    ? "text-foreground"
-                                    : correct
-                                      ? "font-medium text-success"
-                                      : "text-muted line-through"
-                                }`}
-                              >
-                                {outcomeLabel(
-                                  pred.outcome,
-                                  m.homeTeamName,
-                                  m.awayTeamName,
-                                )}
-                              </span>
-                              {member.playerKind === "ai" && pred.reasoning && (
-                                <span className="max-w-md text-xs leading-relaxed text-muted">
-                                  {pred.reasoning}
+                            <PlayerAvatar
+                              image={member.image}
+                              name={member.name}
+                              isAi={member.playerKind === "ai"}
+                              agentKey={member.agentKey}
+                              size={24}
+                            />
+                            <span
+                              title={
+                                member.userId === userId
+                                  ? undefined
+                                  : realNameHint(
+                                      member.displayName,
+                                      member.googleName,
+                                    )
+                              }
+                              className={`min-w-0 flex-1 break-words text-sm text-muted ${
+                                member.userId !== userId &&
+                                realNameHint(
+                                  member.displayName,
+                                  member.googleName,
+                                )
+                                  ? "cursor-help"
+                                  : ""
+                              }`}
+                            >
+                              คำทายของ
+                              {member.userId === userId
+                                ? "คุณ"
+                                : " " + member.name}
+                              {member.playerKind === "ai" && (
+                                <span className="ml-2">
+                                  <Badge tone="accent">AI</Badge>
                                 </span>
                               )}
                             </span>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
+
+                            {!locked ? (
+                              <span className="shrink-0 text-sm text-muted">
+                                เปิดเผยหลังเริ่มแข่ง
+                              </span>
+                            ) : !pred ? (
+                              <span className="shrink-0 text-sm text-muted">
+                                ไม่ได้ทาย
+                              </span>
+                            ) : (
+                              <span className="flex min-w-0 flex-col items-end gap-1 text-right">
+                                <span
+                                  className={`text-sm ${
+                                    actualOutcome == null
+                                      ? "text-foreground"
+                                      : correct
+                                        ? "font-medium text-success"
+                                        : "text-muted line-through"
+                                  }`}
+                                >
+                                  {outcomeLabel(
+                                    pred.outcome,
+                                    m.homeTeamName,
+                                    m.awayTeamName,
+                                  )}
+                                </span>
+                                {member.playerKind === "ai" &&
+                                  pred.reasoning && (
+                                    <span className="max-w-md text-xs leading-relaxed text-muted">
+                                      {pred.reasoning}
+                                    </span>
+                                  )}
+                              </span>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
                   </details>
                 </Card>
               </li>
