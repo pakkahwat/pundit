@@ -259,6 +259,7 @@ export const aiPredictionLogs = pgTable(
     modelId: text('model_id'),
     contextSnapshot: jsonb('context_snapshot').notNull(),
     prompt: text('prompt').notNull(),
+    reasoning: text('reasoning'),
     rawResponse: text('raw_response'),
     parsedHomeScore: smallint('parsed_home_score'),
     parsedAwayScore: smallint('parsed_away_score'),

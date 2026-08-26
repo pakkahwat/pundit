@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { redirect } from "next/navigation";
 
@@ -110,6 +110,16 @@ export default async function RevealPage({
           userName: displayNameSql,
           playerKind: users.playerKind,
           outcome: predictions.predictedOutcome,
+          reasoning: sql<string | null>`(
+            select apl.reasoning
+            from ai_prediction_logs apl
+            join ai_agents aa on aa.id = apl.ai_agent_id
+            where apl.match_id = predictions.match_id
+              and aa.user_id = predictions.user_id
+              and apl.parse_succeeded = true
+            order by apl.created_at desc
+            limit 1
+          )`,
         })
         .from(predictions)
         .innerJoin(users, eq(users.id, predictions.userId))
@@ -383,19 +393,26 @@ export default async function RevealPage({
                               ไม่ได้ทาย
                             </span>
                           ) : (
-                            <span
-                              className={`shrink-0 text-sm ${
-                                actualOutcome == null
-                                  ? "text-foreground"
-                                  : correct
-                                    ? "font-medium text-success"
-                                    : "text-muted line-through"
-                              }`}
-                            >
-                              {outcomeLabel(
-                                pred.outcome,
-                                m.homeTeamName,
-                                m.awayTeamName,
+                            <span className="flex min-w-0 flex-col items-end gap-1 text-right">
+                              <span
+                                className={`text-sm ${
+                                  actualOutcome == null
+                                    ? "text-foreground"
+                                    : correct
+                                      ? "font-medium text-success"
+                                      : "text-muted line-through"
+                                }`}
+                              >
+                                {outcomeLabel(
+                                  pred.outcome,
+                                  m.homeTeamName,
+                                  m.awayTeamName,
+                                )}
+                              </span>
+                              {member.playerKind === "ai" && pred.reasoning && (
+                                <span className="max-w-md text-xs leading-relaxed text-muted">
+                                  {pred.reasoning}
+                                </span>
                               )}
                             </span>
                           )}

@@ -240,6 +240,7 @@ create table ai_prediction_logs (
   model_id text,                                   -- snapshot ของ ai_agents.model_id ตอนเรียกจริง
   context_snapshot jsonb not null,                 -- feature ทั้งหมดที่ส่งให้โมเดล (ฟอร์ม, H2H, อันดับ, เหย้า/เยือน)
   prompt text not null,
+  reasoning text,                                  -- เหตุผลที่โมเดลเลือกผลลัพธ์นี้
   raw_response text,
   parsed_home_score smallint,
   parsed_away_score smallint,

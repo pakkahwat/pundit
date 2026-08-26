@@ -32,6 +32,7 @@ async function predictFor(agent: AgentRow, context: MatchContext) {
     return {
       outcome,
       prompt: `baseline (deterministic ไม่มี LLM) -> ${outcome}: ${reasoning}`,
+      reasoning,
       latencyMs: null as number | null,
     };
   }
@@ -44,6 +45,7 @@ async function predictFor(agent: AgentRow, context: MatchContext) {
     return {
       outcome: result.outcome as PredictionOutcome,
       prompt: `${result.prompt}\n\n--- โมเดลตอบ ---\n${result.outcome}: ${result.reasoning}`,
+      reasoning: result.reasoning,
       latencyMs: result.latencyMs as number | null,
     };
   }
@@ -149,7 +151,7 @@ export async function runAiPredictions(
         lastCallAt.set(agent.provider, Date.now());
       }
 
-      const { outcome, prompt, latencyMs } = await predictFor(agent, context);
+      const { outcome, prompt, reasoning, latencyMs } = await predictFor(agent, context);
 
       const rows = await db.transaction(async (tx) => {
         await tx.execute(sqlTag`select set_config('app.current_user_id', ${agent.user_id}, true)`);
@@ -160,11 +162,11 @@ export async function runAiPredictions(
       await sql`
         insert into ai_prediction_logs (
           ai_agent_id, match_id, prediction_id, model_id, context_snapshot, prompt,
-          latency_ms, parse_succeeded
+          reasoning, latency_ms, parse_succeeded
         )
         values (
           ${agent.id}, ${item.match_id}, ${predictionId}, ${agent.model_id},
-          ${JSON.stringify(context)}::jsonb, ${prompt}, ${latencyMs}, true
+          ${JSON.stringify(context)}::jsonb, ${prompt}, ${reasoning}, ${latencyMs}, true
         )
       `;
       processed++;
