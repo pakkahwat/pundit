@@ -1,18 +1,24 @@
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { createGroq } from '@ai-sdk/groq';
-import { createMistral } from '@ai-sdk/mistral';
-import type { LanguageModel } from 'ai';
-import { generateObject } from 'ai';
-import { z } from 'zod';
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createGroq } from "@ai-sdk/groq";
+import { createMistral } from "@ai-sdk/mistral";
+import { createOpenAI } from "@ai-sdk/openai";
+import type { LanguageModel } from "ai";
+import { generateObject } from "ai";
+import { z } from "zod";
 
-import { PREDICTION_OUTCOMES, type PredictionOutcome } from '../predictions/outcome';
-import type { FormEntry, MatchContext } from './context';
+import {
+  PREDICTION_OUTCOMES,
+  type PredictionOutcome,
+} from "../predictions/outcome";
+import type { FormEntry, MatchContext } from "./context";
 
 // schema ที่บังคับให้โมเดลตอบกลับมาเป็นโครงสร้างนี้เท่านั้น — generateObject จะ retry ให้เองถ้า
 // โมเดลตอบผิดรูป เลยไม่ต้องเขียนโค้ด parse ข้อความดิบ ๆ หรือ regex งม JSON เอง
 const predictionSchema = z.object({
-  outcome: z.enum(PREDICTION_OUTCOMES as [PredictionOutcome, ...PredictionOutcome[]]),
-  reasoning: z.string().describe('เหตุผลสั้น ๆ ไม่เกิน 2 ประโยค เป็นภาษาไทย'),
+  outcome: z.enum(
+    PREDICTION_OUTCOMES as [PredictionOutcome, ...PredictionOutcome[]],
+  ),
+  reasoning: z.string().describe("เหตุผลสั้น ๆ ไม่เกิน 2 ประโยค เป็นภาษาไทย"),
 });
 
 const SYSTEM_PROMPT = `คุณเป็นนักวิเคราะห์ฟุตบอลพรีเมียร์ลีก หน้าที่คือทายว่าแมตช์ที่กำหนดจะจบด้วยผลใด
@@ -25,13 +31,13 @@ const SYSTEM_PROMPT = `คุณเป็นนักวิเคราะห์
 อย่าเลี่ยงตอบ DRAW เพื่อความปลอดภัย ถ้าข้อมูลชี้ชัดว่าฝ่ายใดเหนือกว่าให้ฟันธงไปเลย`;
 
 function formLine(entries: FormEntry[]): string {
-  if (entries.length === 0) return 'ไม่มีข้อมูล';
+  if (entries.length === 0) return "ไม่มีข้อมูล";
   return entries
     .map(
       (e) =>
-        `${e.result} ${e.goalsFor}-${e.goalsAgainst} ${e.isHome ? 'เหย้า' : 'เยือน'} พบ ${e.opponent}`,
+        `${e.result} ${e.goalsFor}-${e.goalsAgainst} ${e.isHome ? "เหย้า" : "เยือน"} พบ ${e.opponent}`,
     )
-    .join(' | ');
+    .join(" | ");
 }
 
 // แปลง MatchContext เป็นข้อความให้โมเดลอ่าน — เก็บ prompt ที่ส่งจริงลง ai_prediction_logs ด้วย
@@ -40,12 +46,14 @@ export function buildPrompt(ctx: MatchContext): string {
   // ตัดตารางคะแนนเหลือ 3 อันดับแรกกับตำแหน่งของสองทีมนี้ — ส่งทั้ง 20 ทีมเปลืองโทเคนโดยไม่ช่วยอะไร
   const standingsLines = ctx.standings
     .map((s, i) => ({ ...s, rank: i + 1 }))
-    .filter((s) => s.rank <= 3 || s.team === ctx.homeTeam || s.team === ctx.awayTeam)
+    .filter(
+      (s) => s.rank <= 3 || s.team === ctx.homeTeam || s.team === ctx.awayTeam,
+    )
     .map(
       (s) =>
         `อันดับ ${s.rank}: ${s.team} — ${s.points} แต้ม จาก ${s.played} นัด (ยิง ${s.goalsFor} เสีย ${s.goalsAgainst})`,
     )
-    .join('\n');
+    .join("\n");
 
   return `แมตช์: ${ctx.homeTeam} (เหย้า) พบ ${ctx.awayTeam} (เยือน)
 
@@ -59,7 +67,7 @@ ${formLine(ctx.awayForm)}
 ${formLine(ctx.headToHead)}
 
 ตารางคะแนน ณ ตอนนี้:
-${standingsLines || 'ยังไม่มีข้อมูล'}
+${standingsLines || "ยังไม่มีข้อมูล"}
 
 ทายผลแมตช์นี้`;
 }
@@ -79,18 +87,37 @@ export type LlmPredictionResult = {
 // สำคัญต่อความเป็นการทดลองที่ยุติธรรม: ทุก provider ใช้ prompt เดียวกัน schema เดียวกัน และ
 // context เดียวกันเป๊ะ ๆ (ดู buildPrompt ข้างบน) — ตัวแปรเดียวที่ต่างกันคือ "โมเดล" เท่านั้น
 // ถ้าเผลอปรับ prompt ให้ตัวใดตัวหนึ่งเป็นพิเศษ ผลเปรียบเทียบทั้งฤดูกาลจะใช้ไม่ได้ทันที
-const PROVIDERS: Record<string, { envKey: string; build: (apiKey: string, modelId: string) => LanguageModel }> = {
+const PROVIDERS: Record<
+  string,
+  { envKey: string; build: (apiKey: string, modelId: string) => LanguageModel }
+> = {
   google: {
-    envKey: 'GOOGLE_GENERATIVE_AI_API_KEY',
+    envKey: "GOOGLE_GENERATIVE_AI_API_KEY",
     build: (apiKey, modelId) => createGoogleGenerativeAI({ apiKey })(modelId),
   },
   groq: {
-    envKey: 'GROQ_API_KEY',
+    envKey: "GROQ_API_KEY",
     build: (apiKey, modelId) => createGroq({ apiKey })(modelId),
   },
   mistral: {
-    envKey: 'MISTRAL_API_KEY',
+    envKey: "MISTRAL_API_KEY",
     build: (apiKey, modelId) => createMistral({ apiKey })(modelId),
+  },
+  openrouter: {
+    envKey: "OPENROUTER_API_KEY",
+    build: (apiKey, modelId) =>
+      createOpenAI({
+        apiKey,
+        baseURL: "https://openrouter.ai/api/v1",
+      })(modelId),
+  },
+  tokenrouter: {
+    envKey: "TOKENROUTER_API_KEY",
+    build: (apiKey, modelId) =>
+      createOpenAI({
+        apiKey,
+        baseURL: "https://api.tokenrouter.com/v1",
+      })(modelId),
   },
 };
 
@@ -106,6 +133,20 @@ export function hasApiKey(provider: string | null): boolean {
   return Boolean(entry && process.env[entry.envKey]);
 }
 
+function repairPredictionText(text: string): string | null {
+  const outcome = text.match(/\b(HOME|DRAW|AWAY)\b/i)?.[1]?.toUpperCase();
+  if (!outcome) return null;
+
+  const reasoning = text
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/[#*_]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 1000);
+
+  return JSON.stringify({ outcome, reasoning });
+}
+
 // เรียก LLM ให้ทายผล — API key อ่านจาก env เท่านั้น (ห้าม hardcode)
 export async function llmPredict(
   provider: string,
@@ -116,7 +157,9 @@ export async function llmPredict(
 ): Promise<LlmPredictionResult> {
   const entry = PROVIDERS[provider];
   if (!entry) {
-    throw new Error(`ไม่รู้จัก provider '${provider}' (มีให้ใช้: ${providerNames().join(', ')})`);
+    throw new Error(
+      `ไม่รู้จัก provider '${provider}' (มีให้ใช้: ${providerNames().join(", ")})`,
+    );
   }
   const apiKey = process.env[entry.envKey];
   if (!apiKey) {
@@ -135,6 +178,7 @@ export async function llmPredict(
     system: systemPrompt || SYSTEM_PROMPT,
     prompt,
     abortSignal: AbortSignal.timeout(options?.timeoutMs ?? 60_000),
+    repairText: async ({ text }) => repairPredictionText(text),
     // retry เยอะกว่า default (2) เพราะ free tier ของ Gemini เจอ 503 "high demand" บ่อยช่วงพีค
     // และ job นี้พลาดไม่ได้จริง ๆ — ถ้าทายไม่ทันก่อนคิกออฟคือเสียแมตช์เดย์นั้นถาวร ย้อนกลับไป
     // ทายใหม่ไม่ได้ (guarded upsert จะปฏิเสธ) AI SDK ใช้ exponential backoff ให้เองอยู่แล้ว
