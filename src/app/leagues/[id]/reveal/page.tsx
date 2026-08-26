@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
@@ -34,8 +35,10 @@ import { getCurrentMatchday } from "@/lib/matches/current-matchday";
 
 export default async function RevealPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ md?: string | string[] }>;
 }) {
   const { id } = await params;
   const session = await auth();
@@ -65,6 +68,27 @@ export default async function RevealPage({
   }
 
   const currentMatchday = await getCurrentMatchday(league.seasonId);
+  const [range] = await db
+    .select({
+      minMd: sql<number>`min(${matches.matchday})`,
+      maxMd: sql<number>`max(${matches.matchday})`,
+    })
+    .from(matches)
+    .where(eq(matches.seasonId, league.seasonId));
+  const minMatchday = range?.minMd ?? currentMatchday;
+  const maxMatchday = Math.min(
+    range?.maxMd ?? currentMatchday,
+    currentMatchday,
+  );
+  const searchParamsValue = await searchParams;
+  const rawMatchday = Number(
+    Array.isArray(searchParamsValue.md)
+      ? searchParamsValue.md[0]
+      : searchParamsValue.md,
+  );
+  const selectedMatchday = Number.isInteger(rawMatchday)
+    ? Math.min(Math.max(rawMatchday, minMatchday), maxMatchday)
+    : currentMatchday;
 
   const homeTeams = alias(teams, "home_teams");
   const awayTeams = alias(teams, "away_teams");
@@ -87,7 +111,7 @@ export default async function RevealPage({
     .where(
       and(
         eq(matches.seasonId, league.seasonId),
-        eq(matches.matchday, currentMatchday),
+        eq(matches.matchday, selectedMatchday),
       ),
     )
     .orderBy(asc(matches.kickoffAt));
@@ -211,10 +235,18 @@ export default async function RevealPage({
     <PageShell width="lg">
       <PageHeader
         title={league.name}
-        subtitle={`คำทายทุกคน · แมตช์เดย์ ${currentMatchday} — เปิดเผยหลังแมตช์เริ่มเท่านั้น`}
+        subtitle={`คำทายทุกคน · แมตช์เดย์ ${selectedMatchday} — เปิดเผยหลังแมตช์เริ่มเท่านั้น`}
       />
 
       <LeagueNav leagueId={id} active="reveal" pendingCount={pending} />
+
+      <RevealMatchdayNav
+        leagueId={id}
+        selected={selectedMatchday}
+        current={currentMatchday}
+        min={minMatchday}
+        max={maxMatchday}
+      />
 
       {visibleMatches.length === 0 ? (
         <EmptyState>ยังไม่มีคำทายในแมตช์เดย์นี้</EmptyState>
@@ -450,5 +482,78 @@ export default async function RevealPage({
         </RevealList>
       )}
     </PageShell>
+  );
+}
+
+function RevealMatchdayNav({
+  leagueId,
+  selected,
+  current,
+  min,
+  max,
+}: {
+  leagueId: string;
+  selected: number;
+  current: number;
+  min: number;
+  max: number;
+}) {
+  const href = (matchday: number) =>
+    `/leagues/${leagueId}/reveal?md=${matchday}`;
+  const arrowClass =
+    "relative inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border text-sm transition-colors";
+
+  return (
+    <div className="mb-4 flex items-center justify-between gap-3">
+      {selected > min ? (
+        <Link
+          href={href(selected - 1)}
+          aria-label="แมตช์เดย์ก่อนหน้า"
+          className={`${arrowClass} text-foreground hover:border-accent hover:bg-accent-soft hover:text-accent-soft-fg`}
+        >
+          ←
+        </Link>
+      ) : (
+        <span
+          className={`${arrowClass} cursor-not-allowed text-muted opacity-40`}
+          aria-hidden
+        >
+          ←
+        </span>
+      )}
+
+      <span className="min-w-0 text-center">
+        <span className="block font-display text-lg font-semibold text-foreground">
+          แมตช์เดย์ {selected}
+        </span>
+        {selected === current ? (
+          <span className="text-xs text-accent">แมตช์เดย์ปัจจุบัน</span>
+        ) : (
+          <Link
+            href={href(current)}
+            className="text-xs text-muted hover:text-foreground hover:underline"
+          >
+            ผ่านไปแล้ว · กลับไปแมตช์เดย์ {current}
+          </Link>
+        )}
+      </span>
+
+      {selected < max ? (
+        <Link
+          href={href(selected + 1)}
+          aria-label="แมตช์เดย์ถัดไป"
+          className={`${arrowClass} text-foreground hover:border-accent hover:bg-accent-soft hover:text-accent-soft-fg`}
+        >
+          →
+        </Link>
+      ) : (
+        <span
+          className={`${arrowClass} cursor-not-allowed text-muted opacity-40`}
+          aria-hidden
+        >
+          →
+        </span>
+      )}
+    </div>
   );
 }
