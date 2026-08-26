@@ -8,10 +8,15 @@ import { db } from '@/db/client';
 import { leagueMembers, leagues } from '@/db/schema';
 import { pendingPredictionCount } from '@/lib/leagues/pending';
 import { getCurrentMatchday } from '@/lib/matches/current-matchday';
+import { PlayerAvatar } from '@/components/player-avatar';
+import { realNameHint } from '@/lib/display-name';
 
 type LeaderboardRow = {
   user_id: string;
   name: string | null;
+  display_name: string | null;
+  google_name: string | null;
+  image: string | null;
   player_kind: 'human' | 'ai';
   total_points: number;
   scored_matches: number;
@@ -53,6 +58,9 @@ export default async function LeaderboardPage({ params }: { params: Promise<{ id
     select
       lm.user_id,
       coalesce(u.display_name, u.name) as name,
+      u.display_name,
+      u.name as google_name,
+      u.image,
       u.player_kind,
       coalesce(scores.total_points, 0)::int as total_points,
       coalesce(scores.scored_matches, 0)::int as scored_matches
@@ -100,7 +108,17 @@ export default async function LeaderboardPage({ params }: { params: Promise<{ id
                   className={`flex items-center gap-3 p-4 ${r.user_id === userId ? 'bg-accent-soft/40' : ''}`}
                 >
                   <span className="w-6 shrink-0 text-sm tabular-nums text-muted">{i + 1}</span>
-                  <span className="min-w-0 flex-1 break-words text-sm text-foreground">
+                  <PlayerAvatar
+                    image={r.image}
+                    name={r.name}
+                    isAi={r.player_kind === 'ai'}
+                  />
+                  <span
+                    title={realNameHint(r.display_name, r.google_name)}
+                    className={`min-w-0 flex-1 break-words text-sm text-foreground ${
+                      realNameHint(r.display_name, r.google_name) ? 'cursor-help' : ''
+                    }`}
+                  >
                     {r.name}
                     {r.player_kind === 'ai' && (
                       <span className="ml-2">

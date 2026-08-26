@@ -13,6 +13,7 @@ import {
 } from "@/components/ui";
 import { LeagueNav } from "@/components/league-nav";
 import { RevealList } from "@/components/reveal-list";
+import { PlayerAvatar } from "@/components/player-avatar";
 import { TeamCrest } from "@/components/team-crest";
 import { db } from "@/db/client";
 import { withUserContext } from "@/db/rls";
@@ -24,7 +25,7 @@ import {
   teams,
   users,
 } from "@/db/schema";
-import { displayNameSql } from "@/lib/display-name";
+import { displayNameSql, realNameHint } from "@/lib/display-name";
 import { formatKickoff, isMatchLocked } from "@/lib/match-time";
 import { pendingPredictionCount } from "@/lib/leagues/pending";
 import { outcomeLabel } from "@/lib/predictions/outcome";
@@ -123,6 +124,9 @@ export default async function RevealPage({
     .select({
       userId: leagueMembers.userId,
       name: displayNameSql,
+      displayName: users.displayName,
+      googleName: users.name,
+      image: users.image,
       playerKind: users.playerKind,
     })
     .from(leagueMembers)
@@ -324,7 +328,25 @@ export default async function RevealPage({
                           key={member.userId}
                           className="flex items-center gap-3 p-4"
                         >
-                          <span className="min-w-0 flex-1 break-words text-sm text-muted">
+                          <PlayerAvatar
+                            image={member.image}
+                            name={member.name}
+                            isAi={member.playerKind === "ai"}
+                            size={24}
+                          />
+                          <span
+                            title={
+                              member.userId === userId
+                                ? undefined
+                                : realNameHint(member.displayName, member.googleName)
+                            }
+                            className={`min-w-0 flex-1 break-words text-sm text-muted ${
+                              member.userId !== userId &&
+                              realNameHint(member.displayName, member.googleName)
+                                ? "cursor-help"
+                                : ""
+                            }`}
+                          >
                             คำทายของ
                             {member.userId === userId
                               ? "คุณ"

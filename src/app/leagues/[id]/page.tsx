@@ -19,7 +19,8 @@ import { DiscordForm } from './discord-form';
 import { StandingsTable } from '@/components/standings-table';
 import { db } from '@/db/client';
 import { leagueMembers, leagues, seasons, users } from '@/db/schema';
-import { displayNameSql } from '@/lib/display-name';
+import { PlayerAvatar } from '@/components/player-avatar';
+import { displayNameSql, realNameHint } from '@/lib/display-name';
 import { competitionLabel } from '@/lib/football/competitions';
 import { getStandings } from '@/lib/football/standings';
 import { pendingPredictionCount } from '@/lib/leagues/pending';
@@ -55,6 +56,9 @@ export default async function LeaguePage({ params }: { params: Promise<{ id: str
   const members = await db
     .select({
       name: displayNameSql,
+      displayName: users.displayName,
+      googleName: users.name,
+      image: users.image,
       email: users.email,
       role: leagueMembers.role,
       playerKind: users.playerKind,
@@ -125,7 +129,23 @@ export default async function LeaguePage({ params }: { params: Promise<{ id: str
             <ul className="divide-y divide-border">
               {members.map((m) => (
                 <li key={m.email ?? m.name} className="flex items-center justify-between gap-3 p-4">
-                  <span className="min-w-0 break-words text-sm text-foreground">{m.name}</span>
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    <PlayerAvatar
+                      image={m.image}
+                      name={m.name}
+                      isAi={m.playerKind === 'ai'}
+                    />
+                    {/* เอาเมาส์ชี้แล้วเฉลยว่าชื่อเล่นนี้คือใคร — cursor-help เป็นตัวบอกว่ามีอะไร
+                        ให้ชี้ ไม่งั้นไม่มีใครรู้ว่าต้องเอาเมาส์ไปวาง */}
+                    <span
+                      title={realNameHint(m.displayName, m.googleName)}
+                      className={`min-w-0 break-words text-sm text-foreground ${
+                        realNameHint(m.displayName, m.googleName) ? 'cursor-help' : ''
+                      }`}
+                    >
+                      {m.name}
+                    </span>
+                  </span>
                   <span className="flex shrink-0 gap-1.5">
                     {m.playerKind === 'ai' && <Badge tone="accent">AI</Badge>}
                     {m.role === 'owner' && <Badge>เจ้าของ</Badge>}
