@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useRef } from 'react';
 
 import { LinkPending } from './link-pending';
 
@@ -16,12 +17,25 @@ import { LinkPending } from './link-pending';
 export function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
   const pathname = usePathname();
   const isActive = href === '/' ? pathname === '/' : pathname.startsWith(href);
+  const ref = useRef<HTMLAnchorElement>(null);
+
+  // บนจอมือถือแถบเมนูเลื่อนแนวนอนได้ และเมนูยาวเกินจอ — ถ้าหน้าที่เปิดอยู่คือตัวท้าย ๆ
+  // (เช่น "ตารางคะแนน") มันจะอยู่นอกจอตั้งแต่แรก คนใช้เห็นแต่ "หน้าแรก" แล้วไม่รู้ว่าตัวเอง
+  // อยู่ตรงไหน เลยเลื่อนแถบให้ตัวที่ active มาอยู่กลางจอตั้งแต่โหลดเสร็จ
+  //
+  // block: 'nearest' สำคัญ — ถ้าไม่ใส่ เบราว์เซอร์จะเลื่อนหน้าทั้งหน้าในแนวตั้งตามไปด้วย
+  // ส่วนตัวที่ซ่อนด้วย sm:hidden/hidden จะไม่มีผลอะไร เพราะ element ที่ display:none เลื่อนไม่ได้อยู่แล้ว
+  useEffect(() => {
+    if (!isActive) return;
+    ref.current?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }, [isActive]);
 
   return (
     <Link
+      ref={ref}
       href={href}
       aria-current={isActive ? 'page' : undefined}
-      className={`relative rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${
+      className={`relative whitespace-nowrap rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${
         isActive
           ? 'bg-accent-soft text-accent-soft-fg'
           : 'text-muted hover:bg-surface-hover hover:text-foreground'

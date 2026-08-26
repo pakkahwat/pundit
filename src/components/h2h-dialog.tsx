@@ -103,7 +103,7 @@ export function H2hDialog({
         onClick={(e) => {
           if (e.target === dialogRef.current) setOpen(false);
         }}
-        className="animate-pop-in m-auto w-[min(34rem,calc(100vw-2rem))] rounded-xl border border-border bg-surface p-0 text-foreground backdrop:bg-black/60 backdrop:backdrop-blur-sm"
+        className="animate-pop-in m-auto w-[min(34rem,calc(100vw-1.5rem))] rounded-xl border border-border bg-surface p-0 text-foreground backdrop:bg-black/60 backdrop:backdrop-blur-sm"
       >
         <div className="max-h-[85vh] overflow-y-auto p-6">
           <div className="mb-4 flex items-start justify-between gap-4">
@@ -165,14 +165,18 @@ export function H2hDialog({
                 {data.matches.map((m) => (
                   <li key={m.id} className="flex items-center justify-between gap-3 p-3 text-sm">
                     <span className="min-w-0">
-                      <span className="flex items-center gap-1.5">
-                        <TeamCrest src={m.homeTeam.crest} size={16} />
-                        <span className="truncate">{m.homeTeam.shortName ?? m.homeTeam.name}</span>
-                        <span className="mx-0.5 shrink-0 rounded bg-surface-hover px-1.5 py-0.5 text-xs tabular-nums">
+                      <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <TeamCrest src={m.homeTeam.crest} size={16} />
+                          <span>{m.homeTeam.shortName ?? m.homeTeam.name}</span>
+                        </span>
+                        <span className="shrink-0 rounded bg-surface-hover px-1.5 py-0.5 text-xs tabular-nums">
                           {m.score.fullTime.home}-{m.score.fullTime.away}
                         </span>
-                        <TeamCrest src={m.awayTeam.crest} size={16} />
-                        <span className="truncate">{m.awayTeam.shortName ?? m.awayTeam.name}</span>
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <TeamCrest src={m.awayTeam.crest} size={16} />
+                          <span>{m.awayTeam.shortName ?? m.awayTeam.name}</span>
+                        </span>
                       </span>
                       <span className="mt-0.5 block text-xs text-muted">{m.competition.name}</span>
                     </span>

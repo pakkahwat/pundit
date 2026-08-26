@@ -19,9 +19,19 @@ export function InviteLink({ url }: { url: string }) {
     }
   }
 
+  // ตัดลิงก์ตรงทับเส้นสุดท้าย เพื่อให้ "รหัสเชิญ" ท้ายลิงก์ไม่โดนตัดทิ้ง
+  // ถ้า truncate ทั้งเส้น บนจอมือถือจะเหลือแค่ https://pundit.devda.fyi/joi… ซึ่งเป็นส่วนที่
+  // ไม่มีประโยชน์เลย — ส่วนที่ต้องอ่าน/บอกเพื่อนคือรหัสท้ายสุด จึงให้โดเมนเป็นตัวที่ถูกตัดแทน
+  const slash = url.lastIndexOf('/');
+  const prefix = slash === -1 ? '' : url.slice(0, slash + 1);
+  const code = slash === -1 ? url : url.slice(slash + 1);
+
   return (
     <div className="flex items-center gap-2 rounded-xl border border-border bg-surface p-2">
-      <code className="min-w-0 flex-1 truncate px-2 font-mono text-xs text-muted">{url}</code>
+      <code className="flex min-w-0 flex-1 px-2 font-mono text-xs text-muted">
+        <span className="truncate">{prefix}</span>
+        <span className="shrink-0 font-semibold text-foreground">{code}</span>
+      </code>
       <button
         type="button"
         onClick={copy}

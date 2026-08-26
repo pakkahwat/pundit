@@ -42,9 +42,9 @@ function MatchRow({ m, teamId }: { m: TeamMatch; teamId: number }) {
       )}
 
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2 text-sm">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
           <TeamCrest src={m.homeTeam.crest} size={18} />
-          <span className={`truncate ${isHome ? 'font-medium text-foreground' : 'text-muted'}`}>
+          <span className={isHome ? 'font-medium text-foreground' : 'text-muted'}>
             {m.homeTeam.shortName ?? m.homeTeam.name}
           </span>
           {finished ? (
@@ -55,17 +55,22 @@ function MatchRow({ m, teamId }: { m: TeamMatch; teamId: number }) {
             <span className="shrink-0 text-xs text-muted">พบ</span>
           )}
           <TeamCrest src={m.awayTeam.crest} size={18} />
-          <span className={`truncate ${!isHome ? 'font-medium text-foreground' : 'text-muted'}`}>
+          <span className={!isHome ? 'font-medium text-foreground' : 'text-muted'}>
             {m.awayTeam.shortName ?? m.awayTeam.name}
           </span>
         </span>
         <span className="mt-0.5 block text-xs text-muted">
           {m.competition.name}
           {m.matchday ? ` · นัดที่ ${m.matchday}` : ''}
+          {/* จอมือถือ: วันเวลาลงมาต่อท้ายบรรทัดรายการแข่ง แทนที่จะเป็นคอลัมน์ขวา — ไม่งั้น
+              คอลัมน์วันที่จะกินความกว้างไปเกือบครึ่ง เหลือที่ให้ชื่อทีมแค่นิดเดียวจนตัดบรรทัดยับ */}
+          <span className="sm:hidden"> · {formatMatchDate(m.utcDate)}</span>
         </span>
       </span>
 
-      <span className="shrink-0 text-xs text-muted">{formatMatchDate(m.utcDate)}</span>
+      <span className="hidden shrink-0 text-xs text-muted sm:block">
+        {formatMatchDate(m.utcDate)}
+      </span>
     </li>
   );
 }

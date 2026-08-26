@@ -50,10 +50,12 @@ export function StandingsTable({
 }) {
   return (
     <>
-      {/* ตารางกว้างเกินจอมือถือแน่นอน — ใส่ overflow-x-auto ให้เลื่อนในกรอบตัวเอง
-          ไม่ให้ทั้งหน้าเลื่อนซ้ายขวาตาม */}
+      {/* จอมือถือกว้างไม่พอสำหรับทุกคอลัมน์ — แทนที่จะปล่อยให้เลื่อนแล้ว "แต้ม" ซึ่งเป็นตัวเลข
+          ที่คนเปิดตารางคะแนนมาดูเป็นอย่างแรกไปหลบอยู่นอกจอ เลือกซ่อนคอลัมน์รองแทน
+          (ชนะ/เสมอ/แพ้ ซ้ำกับ "แข่ง" อยู่แล้ว, ฟอร์ม 5 นัดเป็นของแถม) แล้วค่อยโผล่กลับมาเมื่อจอกว้างพอ
+          overflow-x-auto ยังคงไว้เผื่อชื่อทีมยาวผิดคาด — ให้เลื่อนในกรอบตัวเอง ไม่ใช่ทั้งหน้า */}
       <Card padded={false} className="overflow-x-auto">
-        <table className="w-full min-w-[38rem] text-sm">
+        <table className="w-full text-sm md:min-w-[38rem]">
           <thead>
             <tr className="border-b border-border text-xs text-muted">
               <th className="px-3 py-3 text-left font-medium">#</th>
@@ -61,13 +63,16 @@ export function StandingsTable({
               <th className="px-2 py-3 text-center font-medium">แข่ง</th>
               {!compact && (
                 <>
-                  <th className="px-2 py-3 text-center font-medium">ชนะ</th>
-                  <th className="px-2 py-3 text-center font-medium">เสมอ</th>
-                  <th className="px-2 py-3 text-center font-medium">แพ้</th>
+                  <th className="hidden px-2 py-3 text-center font-medium md:table-cell">ชนะ</th>
+                  <th className="hidden px-2 py-3 text-center font-medium md:table-cell">เสมอ</th>
+                  <th className="hidden px-2 py-3 text-center font-medium md:table-cell">แพ้</th>
                 </>
               )}
-              <th className="px-2 py-3 text-center font-medium">ได้-เสีย</th>
-              <th className="px-2 py-3 text-center font-medium">5 นัดหลัง</th>
+              <th className="px-2 py-3 text-center font-medium">
+                <span className="hidden md:inline">ได้-เสีย</span>
+                <span className="md:hidden">+/-</span>
+              </th>
+              <th className="hidden px-2 py-3 text-center font-medium lg:table-cell">5 นัดหลัง</th>
               <th className="px-3 py-3 text-right font-medium">แต้ม</th>
             </tr>
           </thead>
@@ -112,19 +117,29 @@ export function StandingsTable({
                 <td className="px-2 py-3 text-center tabular-nums text-muted">{r.playedGames}</td>
                 {!compact && (
                   <>
-                    <td className="px-2 py-3 text-center tabular-nums text-muted">{r.won}</td>
-                    <td className="px-2 py-3 text-center tabular-nums text-muted">{r.draw}</td>
-                    <td className="px-2 py-3 text-center tabular-nums text-muted">{r.lost}</td>
+                    <td className="hidden px-2 py-3 text-center tabular-nums text-muted md:table-cell">
+                      {r.won}
+                    </td>
+                    <td className="hidden px-2 py-3 text-center tabular-nums text-muted md:table-cell">
+                      {r.draw}
+                    </td>
+                    <td className="hidden px-2 py-3 text-center tabular-nums text-muted md:table-cell">
+                      {r.lost}
+                    </td>
                   </>
                 )}
-                <td className="px-2 py-3 text-center tabular-nums text-muted">
-                  {r.goalsFor}-{r.goalsAgainst}
-                  <span className="ml-1 text-xs">
-                    ({r.goalDifference > 0 ? '+' : ''}
-                    {r.goalDifference})
+                <td className="whitespace-nowrap px-2 py-3 text-center tabular-nums text-muted">
+                  <span className="hidden md:inline">
+                    {r.goalsFor}-{r.goalsAgainst}
+                  </span>
+                  <span className="text-xs md:ml-1">
+                    <span className="hidden md:inline">(</span>
+                    {r.goalDifference > 0 ? '+' : ''}
+                    {r.goalDifference}
+                    <span className="hidden md:inline">)</span>
                   </span>
                 </td>
-                <td className="px-2 py-3">
+                <td className="hidden px-2 py-3 lg:table-cell">
                   <span className="flex justify-center">
                     <FormPills form={r.form} />
                   </span>

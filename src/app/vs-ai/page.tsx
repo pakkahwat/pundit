@@ -289,14 +289,20 @@ function SplitList({
         <ul className="divide-y divide-border">
           {matches.map((m) => (
             <li key={m.matchId} className="px-4 py-3">
-              <p className="flex items-center gap-1.5 text-sm text-foreground">
-                <TeamCrest src={m.homeCrest} size={16} />
-                <span className="truncate">{m.homeTeam}</span>
-                <span className="mx-0.5 shrink-0 rounded bg-surface-hover px-1.5 py-0.5 text-xs tabular-nums">
+              {/* ให้ขึ้นบรรทัดใหม่ได้แทนที่จะตัดชื่อทีมทิ้ง — บนมือถือชื่อทีมยาว ๆ สองทีม
+                  ใส่แถวเดียวไม่พอแน่นอน */}
+              <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-foreground">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <TeamCrest src={m.homeCrest} size={16} />
+                  <span>{m.homeTeam}</span>
+                </span>
+                <span className="shrink-0 rounded bg-surface-hover px-1.5 py-0.5 text-xs tabular-nums">
                   {m.homeScore}-{m.awayScore}
                 </span>
-                <TeamCrest src={m.awayCrest} size={16} />
-                <span className="truncate">{m.awayTeam}</span>
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <TeamCrest src={m.awayCrest} size={16} />
+                  <span>{m.awayTeam}</span>
+                </span>
               </p>
               <p className="mt-1 text-xs text-muted">
                 คน {m.humanCorrect}/{m.humanTotal} · AI {m.aiCorrect}/{m.aiTotal}

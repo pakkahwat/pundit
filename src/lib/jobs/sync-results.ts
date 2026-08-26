@@ -1,4 +1,5 @@
 import type postgres from 'postgres';
+import { syncCurrentMatchdayColumn } from '@/lib/matches/current-matchday';
 
 const FOOTBALL_DATA_BASE = 'https://api.football-data.org/v4';
 
@@ -70,6 +71,7 @@ export async function upsertMatch(
 // sync ผลแข่งของทุกลีกที่ active อยู่ — 2 requests ต่อลีก (matches + competition)
 // วนตาม seasons ที่มีใน DB ไม่ได้ hardcode รหัสลีกไว้ เพิ่มลีกใหม่ด้วย db:sync-fixtures แล้ว
 // งานนี้จะตามไปดูแลให้เองอัตโนมัติ
+//
 // windowDays: จำกัดช่วงวันที่ดึงมาจาก football-data.org (ย้อนหลัง/ล่วงหน้ากี่วัน) — จำเป็นตอนรัน
 // เป็น cron บน Vercel เพราะฟังก์ชันมีเพดานเวลา 60 วิ ถ้าดึงทั้งฤดูกาล (~380 นัดต่อลีก) มา upsert
 // ทีละแถวจะไม่ทันเวลา แต่ cron ทุก 30 นาทีสนใจแค่นัดที่เพิ่งจบ/ใกล้จะแข่งเท่านั้น โปรแกรมแข่งทั้ง
@@ -122,16 +124,12 @@ export async function runSyncResults(
       processed++;
     }
 
-    // อัปเดต current_matchday ด้วย ไม่งั้นหน้าเว็บจะค้างอยู่แมตช์เดย์เดิมทั้งฤดูกาล
-    const competition = await fdFetch<{ currentSeason: { currentMatchday: number | null } }>(
-      `/competitions/${code}`,
-    );
-    await sql`
-      update seasons set current_matchday = ${competition.currentSeason.currentMatchday}
-      where id = ${season.id}
-    `;
-    matchdays[code] = competition.currentSeason.currentMatchday;
-    log(`[${code}] sync ผลเสร็จ · แมตช์เดย์ ${competition.currentSeason.currentMatchday}`);
+    // อัปเดต current_matchday จากโปรแกรมแข่งที่เพิ่ง sync มา ไม่ใช่จากค่า currentMatchday ของ
+    // football-data.org — ค่าของเขาเดินหน้าก่อนที่แมตช์เดย์ปัจจุบันจะเตะครบ (ดูเหตุผลเต็ม ๆ ใน
+    // lib/matches/current-matchday.ts) ประหยัด request ไปได้อีก 1 ครั้งต่อลีกด้วย
+    const md = await syncCurrentMatchdayColumn([season.id], sql);
+    matchdays[code] = md.get(season.id) ?? null;
+    log(`[${code}] sync ผลเสร็จ · แมตช์เดย์ ${matchdays[code]}`);
   }
 
   return { processed, skipped, matchdays };

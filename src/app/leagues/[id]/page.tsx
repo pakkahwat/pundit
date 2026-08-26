@@ -23,6 +23,7 @@ import { displayNameSql } from '@/lib/display-name';
 import { competitionLabel } from '@/lib/football/competitions';
 import { getStandings } from '@/lib/football/standings';
 import { pendingPredictionCount } from '@/lib/leagues/pending';
+import { getCurrentMatchday } from '@/lib/matches/current-matchday';
 
 export default async function LeaguePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -48,6 +49,7 @@ export default async function LeaguePage({ params }: { params: Promise<{ id: str
   }
   const isOwner = membership.role === 'owner';
 
+
   const [season] = await db.select().from(seasons).where(eq(seasons.id, league.seasonId)).limit(1);
 
   const members = await db
@@ -61,9 +63,11 @@ export default async function LeaguePage({ params }: { params: Promise<{ id: str
     .innerJoin(users, eq(leagueMembers.userId, users.id))
     .where(eq(leagueMembers.leagueId, id));
 
-  const pending = season
-    ? await pendingPredictionCount(league.seasonId, season.currentMatchday ?? 1, userId)
-    : 0;
+  const pending = await pendingPredictionCount(
+    league.seasonId,
+    await getCurrentMatchday(league.seasonId),
+    userId,
+  );
 
   // headers() เป็น async เหมือน params ใน Next 16 — ใช้ต่อ origin จริงของ request เพื่อสร้าง
   // ลิงก์เชิญแบบ absolute URL (ใช้ได้ทั้ง localhost ตอน dev และโดเมนจริงตอน deploy โดยไม่ต้อง hardcode)
@@ -121,7 +125,7 @@ export default async function LeaguePage({ params }: { params: Promise<{ id: str
             <ul className="divide-y divide-border">
               {members.map((m) => (
                 <li key={m.email ?? m.name} className="flex items-center justify-between gap-3 p-4">
-                  <span className="truncate text-sm text-foreground">{m.name}</span>
+                  <span className="min-w-0 break-words text-sm text-foreground">{m.name}</span>
                   <span className="flex shrink-0 gap-1.5">
                     {m.playerKind === 'ai' && <Badge tone="accent">AI</Badge>}
                     {m.role === 'owner' && <Badge>เจ้าของ</Badge>}

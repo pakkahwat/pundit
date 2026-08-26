@@ -2,6 +2,7 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { generateObject } from 'ai';
 import type postgres from 'postgres';
 import { z } from 'zod';
+import { getCurrentMatchday } from '@/lib/matches/current-matchday';
 
 // บทความรายวันที่ AI เขียน — หลักการสำคัญ: ให้โมเดลเขียนจาก "ข้อมูลที่เราส่งให้เท่านั้น" ซึ่งดึงมา
 // จาก DB ของเราเองล้วน ๆ ไม่ใช่ให้มันนึกข่าวจากความจำ เพราะความจำของโมเดลมีวันหมดอายุและแต่งเรื่อง
@@ -55,9 +56,11 @@ export async function buildArticleSource(
   seasonId: string,
   today: string,
 ): Promise<ArticleSource> {
-  const [season] = await sql<{ name: string; current_matchday: number | null }[]>`
-    select name, current_matchday from seasons where id = ${seasonId}
+  const [season] = await sql<{ name: string }[]>`
+    select name from seasons where id = ${seasonId}
   `;
+  // ใช้กติกาเดียวกับที่หน้าเว็บใช้ ไม่งั้นบทความจะเขียนเลขแมตช์เดย์ไม่ตรงกับที่ผู้อ่านเห็นบนเว็บ
+  const currentMatchday = await getCurrentMatchday(seasonId, sql);
 
   const [recentResults, upcomingMatches, standings, accuracy, crests] = await Promise.all([
     sql<
@@ -141,7 +144,7 @@ export async function buildArticleSource(
   return {
     date: today,
     seasonName: season?.name ?? 'Premier League',
-    currentMatchday: season?.current_matchday ?? null,
+    currentMatchday,
     recentResults: recentResults.map((r) => ({
       homeTeam: r.home_team,
       awayTeam: r.away_team,

@@ -5,8 +5,9 @@ import { auth } from '@/auth';
 import { Badge, Card, CenteredMessage, EmptyState, LinkButton, PageHeader, PageShell } from '@/components/ui';
 import { LeagueNav } from '@/components/league-nav';
 import { db } from '@/db/client';
-import { leagueMembers, leagues, seasons } from '@/db/schema';
+import { leagueMembers, leagues } from '@/db/schema';
 import { pendingPredictionCount } from '@/lib/leagues/pending';
+import { getCurrentMatchday } from '@/lib/matches/current-matchday';
 
 type LeaderboardRow = {
   user_id: string;
@@ -38,10 +39,11 @@ export default async function LeaderboardPage({ params }: { params: Promise<{ id
     return <CenteredMessage title="คุณไม่ได้เป็นสมาชิกลีกนี้" />;
   }
 
-  const [season] = await db.select().from(seasons).where(eq(seasons.id, league.seasonId)).limit(1);
-  const pending = season
-    ? await pendingPredictionCount(league.seasonId, season.currentMatchday ?? 1, userId)
-    : 0;
+  const pending = await pendingPredictionCount(
+    league.seasonId,
+    await getCurrentMatchday(league.seasonId),
+    userId,
+  );
 
   // ใช้ raw SQL (ผ่าน db.execute) แทนประกอบผ่าน Drizzle query builder เพราะเป็น aggregate +
   // subquery join ที่เขียนเป็น SQL ตรง ๆ อ่านง่ายกว่า — ไม่ต้องผ่าน withUserContext เลย เพราะ
@@ -98,7 +100,7 @@ export default async function LeaderboardPage({ params }: { params: Promise<{ id
                   className={`flex items-center gap-3 p-4 ${r.user_id === userId ? 'bg-accent-soft/40' : ''}`}
                 >
                   <span className="w-6 shrink-0 text-sm tabular-nums text-muted">{i + 1}</span>
-                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                  <span className="min-w-0 flex-1 break-words text-sm text-foreground">
                     {r.name}
                     {r.player_kind === 'ai' && (
                       <span className="ml-2">

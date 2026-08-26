@@ -9,13 +9,14 @@ import { LeagueNav } from '@/components/league-nav';
 import { LinkPending } from '@/components/link-pending';
 import { db } from '@/db/client';
 import { withUserContext } from '@/db/rls';
-import { leagueMembers, leagues, matches, predictions, seasons, teams } from '@/db/schema';
+import { leagueMembers, leagues, matches, predictions, teams } from '@/db/schema';
 import { formatKickoff, isMatchLocked } from '@/lib/match-time';
 
 import { H2hDialog } from '@/components/h2h-dialog';
 import { TeamCrest } from '@/components/team-crest';
 
 import { PredictionForm } from './prediction-form';
+import { getCurrentMatchday } from '@/lib/matches/current-matchday';
 
 export default async function PredictPage(props: PageProps<'/leagues/[id]/predict'>) {
   const { id } = await props.params;
@@ -41,8 +42,7 @@ export default async function PredictPage(props: PageProps<'/leagues/[id]/predic
     return <CenteredMessage title="คุณไม่ได้เป็นสมาชิกลีกนี้" />;
   }
 
-  const [season] = await db.select().from(seasons).where(eq(seasons.id, league.seasonId)).limit(1);
-  const currentMatchday = season?.currentMatchday ?? 1;
+  const currentMatchday = await getCurrentMatchday(league.seasonId);
 
   // ── เลือกแมตช์เดย์ได้ ────────────────────────────────────────────────────────
   //
@@ -170,11 +170,14 @@ export default async function PredictPage(props: PageProps<'/leagues/[id]/predic
             return (
               <li key={m.id}>
                 <Card className={locked && !finished ? 'opacity-60' : undefined}>
-                  <div className="mb-3 flex items-baseline justify-between gap-3">
-                    <span className="flex min-w-0 items-center gap-2 font-medium">
-                      <TeamCrest src={m.homeCrest} size={20} />
-                      <span className={`truncate ${teamClass(homeWon, awayWon)}`}>
-                        {m.homeTeamName}
+                  {/* มือถือ: ชื่อทีมได้ทั้งแถวเป็นของตัวเอง แล้วปุ่มสถิติกับเวลาลงไปแถวล่าง
+                      จอกว้าง: กลับมาอยู่แถวเดียวกันเหมือนเดิม
+                      เดิมยัดทุกอย่างไว้แถวเดียวเสมอ ชื่อทีมเลยโดนบีบจนเหลือ "Ars..." อ่านไม่ออก */}
+                  <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
+                    <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 font-medium">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <TeamCrest src={m.homeCrest} size={20} />
+                        <span className={teamClass(homeWon, awayWon)}>{m.homeTeamName}</span>
                       </span>
                       {finished ? (
                         <span className="shrink-0 rounded bg-surface-hover px-2 py-0.5 text-sm tabular-nums text-foreground">
@@ -183,12 +186,12 @@ export default async function PredictPage(props: PageProps<'/leagues/[id]/predic
                       ) : (
                         <span className="shrink-0 text-muted">vs</span>
                       )}
-                      <TeamCrest src={m.awayCrest} size={20} />
-                      <span className={`truncate ${teamClass(awayWon, homeWon)}`}>
-                        {m.awayTeamName}
+                      <span className="flex min-w-0 items-center gap-2">
+                        <TeamCrest src={m.awayCrest} size={20} />
+                        <span className={teamClass(awayWon, homeWon)}>{m.awayTeamName}</span>
                       </span>
                     </span>
-                    <span className="flex shrink-0 items-center gap-3">
+                    <span className="flex shrink-0 items-center justify-between gap-3 sm:justify-end">
                       <H2hDialog
                         matchExternalId={m.externalId}
                         homeTeam={m.homeTeamName}

@@ -10,6 +10,7 @@ import { competitionLabel } from '@/lib/football/competitions';
 
 import { joinLeagueById } from './actions';
 import { SubmitButton } from '@/components/submit-button';
+import { getCurrentMatchdays } from '@/lib/matches/current-matchday';
 
 // หน้ารวมลีกทั้งหมดที่เปิดให้เข้าร่วมได้เลย ไม่ต้องมีลิงก์เชิญ — ลดขั้นตอนจาก
 // "ขอลิงก์จากเพื่อน -> เปิดลิงก์ -> กดเข้าร่วม" เหลือ "เลือกลีก -> เริ่มทาย"
@@ -30,7 +31,7 @@ export default async function LeaguesPage() {
       name: leagues.name,
       seasonName: seasons.name,
       competitionCode: seasons.competitionCode,
-      currentMatchday: seasons.currentMatchday,
+      seasonId: leagues.seasonId,
       memberCount: sql<number>`(
         select count(*)::int from league_members lm where lm.league_id = ${leagues.id}
       )`,
@@ -42,6 +43,10 @@ export default async function LeaguesPage() {
     .from(leagues)
     .innerJoin(seasons, eq(seasons.id, leagues.seasonId))
     .orderBy(asc(leagues.name));
+
+  // แมตช์เดย์ปัจจุบันคำนวณจากโปรแกรมแข่งจริง ไม่ใช่ค่าที่ผู้ให้บริการส่งมา
+  // (ดูเหตุผลใน lib/matches/current-matchday.ts) — ดึงทีเดียวให้ทุกลีกในหน้านี้
+  const matchdayBySeason = await getCurrentMatchdays(rows.map((r) => r.seasonId));
 
   const mine = rows.filter((l) => l.isMember);
   const others = rows.filter((l) => !l.isMember);
@@ -76,7 +81,9 @@ export default async function LeaguesPage() {
                         </p>
                         <p className="mt-0.5 text-xs text-muted">
                           {competitionLabel(l.competitionCode, l.seasonName)} · {l.memberCount} ผู้เล่น
-                          {l.currentMatchday ? ` · แมตช์เดย์ ${l.currentMatchday}` : ''}
+                          {matchdayBySeason.has(l.seasonId)
+                            ? ` · แมตช์เดย์ ${matchdayBySeason.get(l.seasonId)}`
+                            : ''}
                         </p>
                       </div>
                       <span className="flex items-center justify-between gap-2">

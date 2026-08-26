@@ -1,6 +1,7 @@
 import type postgres from 'postgres';
 
 import { COLOR, postToDiscord, type DiscordMessage } from '@/lib/notify/discord';
+import { getCurrentMatchdays } from '@/lib/matches/current-matchday';
 
 // ── แจ้งเตือนเข้า Discord ของแต่ละลีก ─────────────────────────────────────────
 //
@@ -396,12 +397,24 @@ async function articleRule(sql: postgres.Sql, league: League): Promise<Candidate
 const RULES = [deadlineRule, revealRule, leadChangeRule, aiSplitRule, recapRule, articleRule];
 
 export async function runNotify(sql: postgres.Sql, log = console.log) {
-  const leagues = await sql<League[]>`
-    select l.id, l.name, l.season_id, l.discord_webhook_url, s.current_matchday
+  const leagueRows = await sql<Omit<League, 'current_matchday'>[]>`
+    select l.id, l.name, l.season_id, l.discord_webhook_url
     from leagues l
     join seasons s on s.id = l.season_id
     where l.discord_webhook_url is not null
   `;
+
+  // แมตช์เดย์ปัจจุบันคำนวณเองจากโปรแกรมแข่ง ไม่ใช่อ่าน seasons.current_matchday
+  // (ดู lib/matches/current-matchday.ts) — ไม่งั้นเตือน "ใกล้ปิดรับ" จะไปเตือนแมตช์เดย์ถัดไป
+  // ทั้งที่คนยังทายแมตช์เดย์ปัจจุบันไม่ครบ และสรุปผลจะสรุปผิดแมตช์เดย์
+  const matchdayBySeason = await getCurrentMatchdays(
+    leagueRows.map((l) => l.season_id),
+    sql,
+  );
+  const leagues: League[] = leagueRows.map((l) => ({
+    ...l,
+    current_matchday: matchdayBySeason.get(l.season_id) ?? null,
+  }));
 
   let sent = 0;
   let failed = 0;

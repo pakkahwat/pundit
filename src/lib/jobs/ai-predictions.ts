@@ -7,6 +7,7 @@ import { buildMatchContext, type MatchContext } from '@/lib/ai/context';
 import { hasApiKey, llmPredict } from '@/lib/ai/llm';
 import { guardedUpsertPrediction } from '@/lib/predictions/guarded-upsert';
 import type { PredictionOutcome } from '@/lib/predictions/outcome';
+import { getCurrentMatchdays } from '@/lib/matches/current-matchday';
 
 // Gemini Flash Lite บน free tier ได้ราว 15 requests/นาที (= 1 ครั้งต่อ 4 วินาที) — เว้น 5 วินาที
 // เผื่อไว้ ดีกว่าโดน 429 แล้วต้องมาไล่ retry เอง
@@ -80,20 +81,33 @@ export async function runAiPredictions(
 
   // ดึงเฉพาะคู่ (agent, match) ที่ยังไม่มีคำทาย — ทำใน SQL ทีเดียวแทนที่จะไล่เช็คใน JS
   // ทำให้รอบถัดไปของ cron หยิบเฉพาะงานที่เหลือจริง ๆ ขึ้นมาทำต่อได้ทันที
-  const pending = await sql<{ agent_id: string; match_id: string }[]>`
-    select a.id as agent_id, m.id as match_id
-    from ai_agents a
-    cross join matches m
-    join seasons s on s.id = m.season_id
-    where a.is_active = true
-      and s.is_active = true
-      and m.matchday = s.current_matchday
-      and m.kickoff_at > now()
-      and not exists (
-        select 1 from predictions p where p.user_id = a.user_id and p.match_id = m.id
-      )
-    order by m.kickoff_at, a.id
-  `;
+  //
+  // จำกัดที่ "แมตช์เดย์ปัจจุบัน" ของแต่ละฤดูกาล โดยคำนวณเองจากโปรแกรมแข่ง ไม่ใช่อ่าน
+  // seasons.current_matchday (ดู lib/matches/current-matchday.ts) — ถ้าเชื่อค่าจากผู้ให้บริการ
+  // AI จะข้ามนัดที่ยังทายได้ของแมตช์เดย์ปัจจุบันไปทายแมตช์เดย์ถัดไปแทน กลายเป็นว่าคนทายแต่ AI ไม่ทาย
+  const activeSeasons = await sql<{ id: string }[]>`select id from seasons where is_active = true`;
+  const matchdayBySeason = await getCurrentMatchdays(
+    activeSeasons.map((s) => s.id),
+    sql,
+  );
+  const seasonIds = [...matchdayBySeason.keys()];
+  const matchdayValues = seasonIds.map((id) => matchdayBySeason.get(id)!);
+
+  const pending = seasonIds.length
+    ? await sql<{ agent_id: string; match_id: string }[]>`
+        select a.id as agent_id, m.id as match_id
+        from ai_agents a
+        cross join matches m
+        join unnest(${seasonIds}::uuid[], ${matchdayValues}::int[]) as cur(season_id, matchday)
+          on cur.season_id = m.season_id and cur.matchday = m.matchday
+        where a.is_active = true
+          and m.kickoff_at > now()
+          and not exists (
+            select 1 from predictions p where p.user_id = a.user_id and p.match_id = m.id
+          )
+        order by m.kickoff_at, a.id
+      `
+    : [];
 
   const agentById = new Map(usable.map((a) => [a.id, a]));
   log(`เหลือให้ทาย ${pending.length} รายการ (agent x แมตช์)`);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export type ChartPoint = {
   matchday: number;
@@ -20,15 +20,35 @@ export type ChartPoint = {
 // สีไม่ได้ทำหน้าที่คนเดียว: มีทั้งคำอธิบายสัญลักษณ์ด้านบน ป้ายชื่อติดปลายเส้น และตารางตัวเลข
 // ให้กางดูได้ด้านล่าง — คนที่แยกสีไม่ออกหรือใช้ screen reader จึงยังอ่านค่าได้ครบ
 
-const W = 720;
-const H = 260;
-const PAD = { top: 16, right: 92, bottom: 34, left: 40 };
-const PLOT_W = W - PAD.left - PAD.right;
-const PLOT_H = H - PAD.top - PAD.bottom;
+// SVG ย่อ/ขยายตามความกว้างของกล่อง ตัวหนังสือข้างในจึงย่อตามไปด้วย — ถ้าใช้ viewBox กว้าง 720
+// เหมือนกันหมด บนจอมือถือ (~330px) ทุกอย่างจะถูกย่อเหลือไม่ถึงครึ่ง ป้ายแกนขนาด 11 หน่วย
+// จะกลายเป็นตัวหนังสือ 5px ที่อ่านไม่ออก จึงมี viewBox สองชุด: จอแคบใช้ชุดที่กว้างใกล้เคียง
+// ขนาดจริง ตัวหนังสือเลยออกมาขนาดใกล้เคียงที่ประกาศไว้
+const WIDE = { W: 720, H: 260, PAD: { top: 16, right: 92, bottom: 34, left: 40 }, xTicks: 8 };
+const NARROW = { W: 360, H: 240, PAD: { top: 14, right: 74, bottom: 30, left: 30 }, xTicks: 4 };
+const NARROW_MAX_PX = 480;
 
 export function AccuracyChart({ points }: { points: ChartPoint[] }) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  // เริ่มที่ false เสมอเพื่อให้ HTML ที่เรนเดอร์จากเซิร์ฟเวอร์ตรงกับตอน hydrate
+  // (เซิร์ฟเวอร์ไม่มีทางรู้ความกว้างจอ) แล้วค่อยสลับเป็นชุดจอแคบหลังวัดขนาดจริงได้
+  const [narrow, setNarrow] = useState(false);
+
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const measure = () => setNarrow(el.clientWidth > 0 && el.clientWidth < NARROW_MAX_PX);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const { W, H, PAD, xTicks } = narrow ? NARROW : WIDE;
+  const PLOT_W = W - PAD.left - PAD.right;
+  const PLOT_H = H - PAD.top - PAD.bottom;
 
   if (points.length < 2) return null;
 
@@ -59,13 +79,13 @@ export function AccuracyChart({ points }: { points: ChartPoint[] }) {
   const aiEnd = lastWithValue('ai');
   const hovered = hoverIdx === null ? null : points[hoverIdx];
 
-  // แปลงตำแหน่งเมาส์จริงเป็นพิกัดใน viewBox — ต้องหารด้วยอัตราส่วนที่ SVG ถูกย่อ/ขยาย
-  // เพราะ SVG กว้าง 100% ของกล่อง ไม่ได้กว้าง 720px ตามที่ประกาศไว้เสมอไป
-  function handleMove(e: React.MouseEvent<SVGSVGElement>) {
+  // แปลงตำแหน่งเมาส์/นิ้วจริงเป็นพิกัดใน viewBox — ต้องหารด้วยอัตราส่วนที่ SVG ถูกย่อ/ขยาย
+  // เพราะ SVG กว้าง 100% ของกล่อง ไม่ได้กว้างเท่า viewBox ตามที่ประกาศไว้เสมอไป
+  function pickNearest(clientX: number) {
     const el = svgRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const vbX = ((e.clientX - rect.left) / rect.width) * W;
+    const vbX = ((clientX - rect.left) / rect.width) * W;
 
     let nearest = 0;
     let best = Infinity;
@@ -79,10 +99,17 @@ export function AccuracyChart({ points }: { points: ChartPoint[] }) {
     setHoverIdx(nearest);
   }
 
+  // มือถือไม่มีเมาส์ให้ชี้ — รับ touch ด้วยเพื่อให้แตะดูค่าแต่ละแมตช์เดย์ได้เหมือนกัน
+  // ตั้งใจไม่เรียก preventDefault เพื่อให้ยังเลื่อนหน้าผ่านตัวกราฟได้ตามปกติ
+  function handleTouch(e: React.TouchEvent<SVGSVGElement>) {
+    const t = e.touches[0];
+    if (t) pickNearest(t.clientX);
+  }
+
   const gridPcts = [0, 25, 50, 75, 100];
 
   return (
-    <div>
+    <div ref={wrapRef}>
       {/* คำอธิบายสัญลักษณ์ — ต้องมีเสมอเมื่อมีตั้งแต่ 2 ชุดข้อมูลขึ้นไป ตัวหนังสือใช้สีข้อความปกติ
           ไม่ใช่สีของเส้น (สีอยู่ที่จุดวงกลมข้าง ๆ) เพื่อให้อ่านง่ายในทุกธีม */}
       <div className="mb-3 flex flex-wrap items-center gap-4 text-sm">
@@ -111,8 +138,11 @@ export function AccuracyChart({ points }: { points: ChartPoint[] }) {
         className="h-auto w-full"
         role="img"
         aria-label="กราฟเส้นเปรียบเทียบความแม่นสะสมของคนกับ AI ตามแมตช์เดย์ ค่าตัวเลขทั้งหมดอยู่ในตารางด้านล่าง"
-        onMouseMove={handleMove}
+        onMouseMove={(e) => pickNearest(e.clientX)}
         onMouseLeave={() => setHoverIdx(null)}
+        onTouchStart={handleTouch}
+        onTouchMove={handleTouch}
+        onTouchEnd={() => setHoverIdx(null)}
       >
         {/* เส้นตาราง — เส้นทึบบาง 1px สีจางกว่าพื้นหนึ่งขั้น ไม่ใช้เส้นประเพราะเส้นประอ่านเหมือน
             "ค่าคาดการณ์" หรือ "เส้นเกณฑ์" ทั้งที่มันเป็นแค่เส้นตาราง */}
@@ -141,7 +171,7 @@ export function AccuracyChart({ points }: { points: ChartPoint[] }) {
 
         {/* แกน X: ป้ายแมตช์เดย์ เว้นระยะไม่ให้ป้ายชนกันเมื่อมีจุดเยอะ */}
         {points.map((p, i) => {
-          const step = Math.ceil(points.length / 8);
+          const step = Math.ceil(points.length / xTicks);
           if (i % step !== 0 && i !== points.length - 1) return null;
           return (
             <text
@@ -262,7 +292,7 @@ export function AccuracyChart({ points }: { points: ChartPoint[] }) {
             {hovered.ai === null ? '—' : `${Math.round(hovered.ai)}%`}
           </>
         ) : (
-          'เอาเมาส์ชี้บนกราฟเพื่อดูค่าแต่ละแมตช์เดย์'
+          'แตะหรือเอาเมาส์ชี้บนกราฟเพื่อดูค่าแต่ละแมตช์เดย์'
         )}
       </p>
 

@@ -30,6 +30,7 @@ import {
 import { displayNameSql } from '@/lib/display-name';
 import { getTodayMatches } from '@/lib/matches/today';
 import { SubmitButton } from '@/components/submit-button';
+import { getCurrentMatchdays } from '@/lib/matches/current-matchday';
 
 // นี่คือ Server Component (ไม่มี "use client" ด้านบน) — รันบน server เท่านั้น เรียก auth()
 // อ่าน session ตรง ๆ ได้เลยโดยไม่ต้องส่ง API call จาก browser แบบที่ Vue/Nuxt SPA เคยทำ
@@ -107,7 +108,6 @@ export default async function Home(props: PageProps<'/'>) {
         id: leagues.id,
         name: leagues.name,
         seasonId: leagues.seasonId,
-        currentMatchday: seasons.currentMatchday,
       })
       .from(leagueMembers)
       .innerJoin(leagues, eq(leagueMembers.leagueId, leagues.id))
@@ -118,6 +118,10 @@ export default async function Home(props: PageProps<'/'>) {
     db.select({ name: displayNameSql }).from(users).where(eq(users.id, userId)).limit(1),
     getTodayMatches(userId),
   ]);
+
+  // แมตช์เดย์ปัจจุบันของทุกลีกในคำสั่งเดียว — ไม่ได้อ่านจาก seasons.current_matchday เพราะค่านั้น
+  // มาจากผู้ให้บริการและเดินหน้าก่อนที่แมตช์เดย์ปัจจุบันจะเตะครบ (ดู lib/matches/current-matchday.ts)
+  const matchdayBySeason = await getCurrentMatchdays(myLeagues.map((l) => l.seasonId));
 
   const totalPages = Math.max(1, Math.ceil(total / ARTICLES_PER_PAGE));
   const page = Math.min(requestedPage, totalPages);
@@ -184,7 +188,7 @@ export default async function Home(props: PageProps<'/'>) {
       openMatches.filter(
         (m) =>
           m.seasonId === l.seasonId &&
-          m.matchday === (l.currentMatchday ?? 1) &&
+          m.matchday === (matchdayBySeason.get(l.seasonId) ?? 1) &&
           !myPredictedIds.has(m.id),
       ).length,
     ]),
@@ -196,7 +200,9 @@ export default async function Home(props: PageProps<'/'>) {
       <div className="flex flex-col gap-10">
         <Hero
           userName={me?.name ?? ''}
-          matchday={myLeagues[0]?.currentMatchday ?? null}
+          matchday={
+            myLeagues[0] ? (matchdayBySeason.get(myLeagues[0].seasonId) ?? null) : null
+          }
           leagueCount={myLeagues.length}
           pendingCount={totalPending}
         />
@@ -260,7 +266,9 @@ export default async function Home(props: PageProps<'/'>) {
                             {l.name}
                           </p>
                           <p className="mt-0.5 text-xs text-muted">
-                            {l.currentMatchday ? `แมตช์เดย์ ${l.currentMatchday}` : 'ยังไม่เริ่ม'}
+                            {matchdayBySeason.has(l.seasonId)
+                              ? `แมตช์เดย์ ${matchdayBySeason.get(l.seasonId)}`
+                              : 'ยังไม่เริ่ม'}
                           </p>
                         </div>
 

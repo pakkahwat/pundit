@@ -24,8 +24,12 @@ async function currentDisplayName(userId: string) {
 // แถบหัวเว็บที่อยู่ทุกหน้า — เป็น async Server Component เรียก auth() เองได้เลย ไม่ต้องให้แต่ละหน้า
 // ส่ง session ลงมาเป็น prop (วางไว้ใน layout.tsx ทำให้ทุกหน้าได้ chrome ชุดเดียวกันอัตโนมัติ)
 //
-// เมนูหลักถูกแยกเป็นสองแถวบนจอมือถือ (แถวบน = โลโก้ + บัญชี, แถวล่าง = เมนู) เพราะถ้ายัดทุกอย่าง
-// ไว้แถวเดียว ชื่อลิงก์จะถูกบีบจนอ่านไม่ออกบนจอแคบ
+// เมนูหลักถูกแยกเป็นสองแถวบนจอแคบ (แถวบน = โลโก้ + บัญชี, แถวล่าง = เมนู) เพราะถ้ายัดทุกอย่าง
+// ไว้แถวเดียว ชื่อลิงก์จะถูกบีบจนอ่านไม่ออก
+//
+// จุดสลับเป็น md (768px) ไม่ใช่ sm (640px) เพราะวัดจริงแล้วแถวเดียว (โลโก้ + เมนู 5 อัน + ชื่อ +
+// ปุ่มออกจากระบบ) ต้องการราว 720px — ถ้าสลับที่ 640px ช่วง 640-719px จะดันหน้าเว็บล้นออกไป 80px
+// จนเลื่อนซ้ายขวาได้ทั้งหน้า ซึ่งเป็นความกว้างของแท็บเล็ตแนวตั้งและหน้าต่างเบราว์เซอร์แบบครึ่งจอ
 export async function SiteHeader() {
   const session = await auth();
   const signedIn = Boolean(session?.user?.id);
@@ -39,7 +43,7 @@ export async function SiteHeader() {
           </Link>
 
           {signedIn && (
-            <nav className="hidden items-center gap-1 sm:flex" aria-label="เมนูหลัก">
+            <nav className="hidden items-center gap-1 md:flex" aria-label="เมนูหลัก">
               <NavLink href="/">หน้าแรก</NavLink>
               <NavLink href="/leagues">ลีกของฉัน</NavLink>
               <NavLink href="/vs-ai">คนปะทะ AI</NavLink>
@@ -52,7 +56,7 @@ export async function SiteHeader() {
             <div className="flex shrink-0 items-center gap-2">
               <Link
                 href="/settings"
-                className="hidden rounded-lg px-2.5 py-1.5 text-sm text-muted transition-colors hover:bg-surface-hover hover:text-foreground sm:inline"
+                className="hidden rounded-lg px-2.5 py-1.5 text-sm text-muted transition-colors hover:bg-surface-hover hover:text-foreground md:inline"
               >
                 {await currentDisplayName(session.user.id)}
               </Link>
@@ -73,7 +77,7 @@ export async function SiteHeader() {
         {/* เมนูแถวที่สองสำหรับจอมือถือ — เลื่อนแนวนอนได้ถ้าเมนูยาวเกินจอ */}
         {signedIn && (
           <nav
-            className="-mx-4 flex items-center gap-1 overflow-x-auto px-4 pb-2 sm:hidden"
+            className="-mx-4 flex items-center gap-1 overflow-x-auto px-4 pb-2 md:hidden"
             aria-label="เมนูหลัก (มือถือ)"
           >
             <NavLink href="/">หน้าแรก</NavLink>

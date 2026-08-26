@@ -20,7 +20,6 @@ import {
   leagues,
   matches,
   predictions,
-  seasons,
   teams,
   users,
 } from "@/db/schema";
@@ -28,6 +27,7 @@ import { displayNameSql } from "@/lib/display-name";
 import { formatKickoff, isMatchLocked } from "@/lib/match-time";
 import { pendingPredictionCount } from "@/lib/leagues/pending";
 import { outcomeLabel } from "@/lib/predictions/outcome";
+import { getCurrentMatchday } from '@/lib/matches/current-matchday';
 
 export default async function RevealPage({
   params,
@@ -61,12 +61,7 @@ export default async function RevealPage({
     return <CenteredMessage title="คุณไม่ได้เป็นสมาชิกลีกนี้" />;
   }
 
-  const [season] = await db
-    .select()
-    .from(seasons)
-    .where(eq(seasons.id, league.seasonId))
-    .limit(1);
-  const currentMatchday = season?.currentMatchday ?? 1;
+  const currentMatchday = await getCurrentMatchday(league.seasonId);
 
   const homeTeams = alias(teams, "home_teams");
   const awayTeams = alias(teams, "away_teams");
@@ -215,13 +210,17 @@ export default async function RevealPage({
             return (
               <li key={m.id}>
                 <Card padded={false}>
-                  <div className="flex items-center justify-between gap-3 border-b border-border p-4">
-                    <span className="flex min-w-0 items-center gap-2 font-medium text-foreground">
-                      <TeamCrest src={m.homeCrest} size={20} />
-                      <span className="truncate">{m.homeTeamName}</span>
+                  <div className="flex flex-col gap-2 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                    <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 font-medium text-foreground">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <TeamCrest src={m.homeCrest} size={20} />
+                        <span>{m.homeTeamName}</span>
+                      </span>
                       <span className="shrink-0 text-muted">vs</span>
-                      <TeamCrest src={m.awayCrest} size={20} />
-                      <span className="truncate">{m.awayTeamName}</span>
+                      <span className="flex min-w-0 items-center gap-2">
+                        <TeamCrest src={m.awayCrest} size={20} />
+                        <span>{m.awayTeamName}</span>
+                      </span>
                     </span>
                     <span className="shrink-0 text-xs text-muted">
                       {finished ? (
@@ -250,7 +249,7 @@ export default async function RevealPage({
                           key={member.userId}
                           className="flex items-center gap-3 p-4"
                         >
-                          <span className="min-w-0 flex-1 truncate text-sm text-muted">
+                          <span className="min-w-0 flex-1 break-words text-sm text-muted">
                             คำทายของ
                             {member.userId === userId
                               ? "คุณ"

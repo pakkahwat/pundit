@@ -3,6 +3,7 @@ import type postgres from 'postgres';
 import { COMPETITIONS, competitionByCode } from '@/lib/football/competitions';
 
 import { fdFetch, upsertMatch, type FdMatch } from './sync-results';
+import { syncCurrentMatchdayColumn } from '@/lib/matches/current-matchday';
 
 type Competition = {
   id: number;
@@ -78,6 +79,12 @@ export async function runSyncFixturesFor(sql: postgres.Sql, code: string, log = 
     processed++;
   }
   log(`[${code}] sync ${processed} แมตช์ (ข้าม ${skipped})`);
+
+  // ทับค่า current_matchday ที่เพิ่งใส่ไปจาก API ด้วยค่าที่คำนวณจากโปรแกรมแข่งจริง
+  // ต้องทำหลังใส่แมตช์ครบแล้วเท่านั้น เพราะกติกาใหม่อ่านจากตาราง matches
+  // (ตอน insert ด้านบนยังไม่มีแมตช์สักนัด จึงยังคำนวณไม่ได้)
+  const md = await syncCurrentMatchdayColumn([seasonId], sql);
+  log(`[${code}] แมตช์เดย์ปัจจุบัน: ${md.get(seasonId)}`);
 
   return { processed, skipped, seasonId };
 }
