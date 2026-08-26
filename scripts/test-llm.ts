@@ -1,39 +1,53 @@
-import './lib/prefer-ipv4'; // ต้องมาก่อน import อื่นที่ใช้เน็ต (ดูเหตุผลในไฟล์นั้น)
+import "./lib/prefer-ipv4"; // ต้องมาก่อน import อื่นที่ใช้เน็ต (ดูเหตุผลในไฟล์นั้น)
 
-import { config } from 'dotenv';
-import path from 'node:path';
+import { config } from "dotenv";
+import path from "node:path";
 
-import { llmPredict } from '../src/lib/ai/llm';
-import type { MatchContext } from '../src/lib/ai/context';
+import { llmPredict } from "../src/lib/ai/llm";
+import type { MatchContext } from "../src/lib/ai/context";
 
-config({ path: path.resolve(__dirname, '../.env.local') });
+config({ path: path.resolve(__dirname, "../.env.local") });
 
 // เทสว่าต่อ Gemini ติดและ structured output ทำงานถูก โดยไม่ต้องแตะ DB เลย — ใช้ context ปลอม
 // ที่แต่งขึ้นมาเอง เพื่อแยกปัญหา "ต่อ LLM ไม่ได้" ออกจาก "ข้อมูลใน DB ไม่พร้อม" ให้ชัด
 // ใช้: npx tsx scripts/test-llm.ts [model-id]
 
 const f = (results: string, opponent: string) =>
-  results.split('').map((r) => ({
-    matchId: '00000000-0000-0000-0000-000000000000',
-    kickoffAt: '2026-08-01T00:00:00Z',
+  results.split("").map((r) => ({
+    matchId: "00000000-0000-0000-0000-000000000000",
+    kickoffAt: "2026-08-01T00:00:00Z",
     opponent,
     isHome: true,
-    goalsFor: r === 'W' ? 2 : r === 'D' ? 1 : 0,
-    goalsAgainst: r === 'W' ? 0 : r === 'D' ? 1 : 2,
-    result: r as 'W' | 'D' | 'L',
+    goalsFor: r === "W" ? 2 : r === "D" ? 1 : 0,
+    goalsAgainst: r === "W" ? 0 : r === "D" ? 1 : 2,
+    result: r as "W" | "D" | "L",
   }));
 
 const fakeContext: MatchContext = {
-  matchId: '00000000-0000-0000-0000-000000000000',
-  kickoffAt: '2026-08-30T14:00:00Z',
-  homeTeam: 'Arsenal FC',
-  awayTeam: 'Burnley FC',
-  homeForm: f('WWWDW', 'ทีมสมมติ'),
-  awayForm: f('LLDLL', 'ทีมสมมติ'),
-  headToHead: f('WWDWW', 'Burnley FC'),
+  matchId: "00000000-0000-0000-0000-000000000000",
+  kickoffAt: "2026-08-30T14:00:00Z",
+  homeTeam: "Arsenal FC",
+  awayTeam: "Burnley FC",
+  homeForm: f("WWWDW", "ทีมสมมติ"),
+  awayForm: f("LLDLL", "ทีมสมมติ"),
+  headToHead: f("WWDWW", "Burnley FC"),
   standings: [
-    { team: 'Arsenal FC', played: 5, points: 13, goalsFor: 11, goalsAgainst: 3, goalDiff: 8 },
-    { team: 'Burnley FC', played: 5, points: 2, goalsFor: 3, goalsAgainst: 12, goalDiff: -9 },
+    {
+      team: "Arsenal FC",
+      played: 5,
+      points: 13,
+      goalsFor: 11,
+      goalsAgainst: 3,
+      goalDiff: 8,
+    },
+    {
+      team: "Burnley FC",
+      played: 5,
+      points: 2,
+      goalsFor: 3,
+      goalsAgainst: 12,
+      goalDiff: -9,
+    },
   ],
 };
 
@@ -41,18 +55,24 @@ const fakeContext: MatchContext = {
 //   npm run db:test-llm -- google gemini-flash-lite-latest
 //   npm run db:test-llm -- groq llama-3.3-70b-versatile
 //   npm run db:test-llm -- mistral mistral-small-latest
+//   npm run db:test-llm -- openrouter stealth/ox-alpha
+//   npm run db:test-llm -- tokenrouter qwen/qwen3.8-max-free
 async function main() {
-  const provider = process.argv[2] ?? 'google';
-  const modelId = process.argv[3] ?? 'gemini-flash-lite-latest';
+  const provider = process.argv[2] ?? "google";
+  const modelId = process.argv[3] ?? "gemini-flash-lite-latest";
 
   const ENV_BY_PROVIDER: Record<string, string> = {
-    google: 'GOOGLE_GENERATIVE_AI_API_KEY',
-    groq: 'GROQ_API_KEY',
-    mistral: 'MISTRAL_API_KEY',
+    google: "GOOGLE_GENERATIVE_AI_API_KEY",
+    groq: "GROQ_API_KEY",
+    mistral: "MISTRAL_API_KEY",
+    openrouter: "OPENROUTER_API_KEY",
+    tokenrouter: "TOKENROUTER_API_KEY",
   };
   const envName = ENV_BY_PROVIDER[provider];
   if (!envName) {
-    console.error(`ไม่รู้จัก provider '${provider}' (มี: ${Object.keys(ENV_BY_PROVIDER).join(', ')})`);
+    console.error(
+      `ไม่รู้จัก provider '${provider}' (มี: ${Object.keys(ENV_BY_PROVIDER).join(", ")})`,
+    );
     process.exit(1);
   }
 
@@ -62,8 +82,12 @@ async function main() {
     process.exit(1);
   }
   // โชว์แค่หัวกับท้ายของ key พอให้ยืนยันว่าอ่านค่าถูกตัว — ไม่ปริ้นท์เต็มลง terminal/log
-  console.log(`key: ${key.slice(0, 6)}...${key.slice(-4)} (ยาว ${key.length} ตัวอักษร)`);
-  console.log(`เรียก ${provider}/${modelId} (timeout 60 วินาที, retry ได้ 3 ครั้ง)...`);
+  console.log(
+    `key: ${key.slice(0, 6)}...${key.slice(-4)} (ยาว ${key.length} ตัวอักษร)`,
+  );
+  console.log(
+    `เรียก ${provider}/${modelId} (timeout 60 วินาที, retry ได้ 3 ครั้ง)...`,
+  );
 
   // เปิด retry ไว้พอประมาณ เพราะ free tier เจอ 503 "high demand" ชั่วคราวได้บ่อย — แต่ไม่เยอะ
   // เท่าตอนรันจริง (5 ครั้ง) เพราะตอนเทสอยากรู้ผลเร็ว ถ้าล้มก็ยังเห็นรายละเอียด error เต็ม ๆ อยู่ดี
@@ -83,7 +107,7 @@ async function main() {
 // error ของ AI SDK ห่อรายละเอียดที่ต้องใช้ debug ไว้ในฟิลด์ย่อย (statusCode, responseBody) ซึ่ง
 // console.error ตัวมันเองไม่โชว์ให้ — แกะออกมาปริ้นท์เองเพื่อให้รู้ว่าโดนปฏิเสธเพราะอะไรจริง ๆ
 main().catch((err: unknown) => {
-  console.error('\nเทส LLM ล้มเหลว');
+  console.error("\nเทส LLM ล้มเหลว");
   const e = err as {
     name?: string;
     message?: string;
@@ -99,19 +123,23 @@ main().catch((err: unknown) => {
   if (e.responseBody) console.error(`  คำตอบจากเซิร์ฟเวอร์: ${e.responseBody}`);
   if (e.cause) console.error(`  สาเหตุเบื้องหลัง: ${String(e.cause)}`);
 
-  if (e.name === 'TimeoutError' || String(e.message).includes('aborted')) {
+  if (e.name === "TimeoutError" || String(e.message).includes("aborted")) {
     console.error(
-      '\n  => ครบเวลาแล้วปลายทางยังไม่ตอบเลย มักแปลว่าต่อออกเน็ตไม่ได้ (proxy/firewall/IPv6 เสีย)',
+      "\n  => ครบเวลาแล้วปลายทางยังไม่ตอบเลย มักแปลว่าต่อออกเน็ตไม่ได้ (proxy/firewall/IPv6 เสีย)",
     );
   } else if (e.statusCode === 503) {
     console.error(
-      '\n  => 503 คือฝั่ง Google รับ request ไม่ไหวชั่วคราว (free tier ช่วงพีค) ไม่ใช่ปัญหาโค้ดหรือ key\n' +
-        '     รอสักครู่แล้วลองใหม่ หรือลองรุ่นอื่น: npm run test:llm gemini-flash-lite-latest',
+      "\n  => 503 คือฝั่ง Google รับ request ไม่ไหวชั่วคราว (free tier ช่วงพีค) ไม่ใช่ปัญหาโค้ดหรือ key\n" +
+        "     รอสักครู่แล้วลองใหม่ หรือลองรุ่นอื่น: npm run test:llm gemini-flash-lite-latest",
     );
   } else if (e.statusCode === 429) {
-    console.error('\n  => 429 คือเกินโควตา rate limit ของ free tier — รอสักครู่แล้วลองใหม่');
+    console.error(
+      "\n  => 429 คือเกินโควตา rate limit ของ free tier — รอสักครู่แล้วลองใหม่",
+    );
   } else if (e.statusCode === 401 || e.statusCode === 403) {
-    console.error('\n  => API key ใช้ไม่ได้ ตรวจ GOOGLE_GENERATIVE_AI_API_KEY ใน .env.local');
+    console.error(
+      "\n  => API key ใช้ไม่ได้ ตรวจ GOOGLE_GENERATIVE_AI_API_KEY ใน .env.local",
+    );
   }
   process.exit(1);
 });

@@ -1,8 +1,8 @@
-import { config } from 'dotenv';
-import postgres from 'postgres';
-import path from 'node:path';
+import { config } from "dotenv";
+import postgres from "postgres";
+import path from "node:path";
 
-config({ path: path.resolve(__dirname, '../.env.local') });
+config({ path: path.resolve(__dirname, "../.env.local") });
 
 // สร้าง user + ai_agents row สำหรับผู้เล่น AI — รันครั้งเดียวตอนตั้งโปรเจกต์ (idempotent เพราะเช็ค
 // จาก ai_agents.agent_key ก่อน insert ทุกครั้ง — รันซ้ำได้ปลอดภัย ไม่สร้าง user ซ้ำ)
@@ -26,19 +26,19 @@ type AgentSeed = {
 
 const AGENTS: AgentSeed[] = [
   {
-    agentKey: 'baseline-form',
-    displayName: 'ลุงสถิติ (ไม่ใช้ AI)',
+    agentKey: "baseline-form",
+    displayName: "ลุงสถิติ (ไม่ใช้ AI)",
     provider: null,
     modelId: null,
-    strategy: 'static_form_based',
+    strategy: "static_form_based",
     systemPrompt: null,
   },
   {
-    agentKey: 'gemini-flash-lite',
-    displayName: 'เจ้าสายฟ้า (Gemini Flash Lite)',
-    provider: 'google',
-    modelId: 'gemini-flash-lite-latest',
-    strategy: 'llm',
+    agentKey: "gemini-flash-lite",
+    displayName: "เจ้าสายฟ้า (Gemini Flash Lite)",
+    provider: "google",
+    modelId: "gemini-flash-lite-latest",
+    strategy: "llm",
     systemPrompt: null, // null = ใช้ SYSTEM_PROMPT กลางใน src/lib/ai/llm.ts
   },
   // หมายเหตุว่าทำไมเหลือ Gemini แค่รุ่นเดียว (ทดสอบจริงกับ key ฟรีแล้วทั้งคู่):
@@ -65,11 +65,11 @@ const AGENTS: AgentSeed[] = [
   // ทำลายกติกาข้อที่ 5 (AI เห็นเฉพาะข้อมูลก่อนคิกออฟ) และจะทำให้ตัวเลขความแม่นทั้งหมด
   // ไร้ความหมาย เพราะเราจะแยกไม่ออกว่ามันวิเคราะห์เก่งหรือแค่แอบดูเฉลย
   {
-    agentKey: 'groq-gpt-oss',
-    displayName: 'บิ๊กเบิ้ม (GPT-OSS 120B)',
-    provider: 'groq',
-    modelId: 'openai/gpt-oss-120b',
-    strategy: 'llm',
+    agentKey: "groq-gpt-oss",
+    displayName: "บิ๊กเบิ้ม (GPT-OSS 120B)",
+    provider: "groq",
+    modelId: "openai/gpt-oss-120b",
+    strategy: "llm",
     systemPrompt: null,
   },
   // ตัวที่สองจงใจเลือกตระกูลเดียวกับตัวบนแต่เล็กกว่า (120B vs 20B) — ได้คำตอบว่า "โมเดลใหญ่ขึ้น
@@ -78,19 +78,35 @@ const AGENTS: AgentSeed[] = [
   // เคยลอง qwen/qwen3.6-27b แล้วไม่ผ่าน: Groq ตอบ 400 json_validate_failed โดย failed_generation
   // ว่างเปล่า — น่าจะเป็นโมเดลสายคิดก่อนตอบที่พ่นข้อความคิดออกมาก่อน เลยชนกับโหมด JSON เข้มงวด
   {
-    agentKey: 'groq-gpt-oss-20b',
-    displayName: 'น้องเล็กหัวใจโต (GPT-OSS 20B)',
-    provider: 'groq',
-    modelId: 'openai/gpt-oss-20b',
-    strategy: 'llm',
+    agentKey: "groq-gpt-oss-20b",
+    displayName: "น้องเล็กหัวใจโต (GPT-OSS 20B)",
+    provider: "groq",
+    modelId: "openai/gpt-oss-20b",
+    strategy: "llm",
     systemPrompt: null,
   },
   {
-    agentKey: 'mistral-small',
-    displayName: 'ลมกรดฝรั่งเศส (Mistral Small)',
-    provider: 'mistral',
-    modelId: 'mistral-small-latest',
-    strategy: 'llm',
+    agentKey: "mistral-small",
+    displayName: "ลมกรดฝรั่งเศส (Mistral Small)",
+    provider: "mistral",
+    modelId: "mistral-small-latest",
+    strategy: "llm",
+    systemPrompt: null,
+  },
+  {
+    agentKey: "open-router",
+    displayName: "นินจาเงียบเหงา (stealth/ox-alpha)",
+    provider: "openrouter",
+    modelId: "stealth/ox-alpha",
+    strategy: "llm",
+    systemPrompt: null,
+  },
+  {
+    agentKey: "token-router-qwen-max-free",
+    displayName: "มังกรหยก (Qwen Max Free)",
+    provider: "tokenrouter",
+    modelId: "qwen/qwen3.8-max-free",
+    strategy: "llm",
     systemPrompt: null,
   },
 ];
@@ -98,7 +114,7 @@ const AGENTS: AgentSeed[] = [
 async function main() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
-    throw new Error('Missing DATABASE_URL ใน .env.local');
+    throw new Error("Missing DATABASE_URL ใน .env.local");
   }
   const sql = postgres(connectionString, { prepare: false });
 
@@ -170,6 +186,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('Seed AI agents ล้มเหลว:', err);
+  console.error("Seed AI agents ล้มเหลว:", err);
   process.exit(1);
 });

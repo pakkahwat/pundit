@@ -1,9 +1,9 @@
-import './lib/prefer-ipv4'; // ต้องมาก่อน import อื่นที่ใช้เน็ต (ดูเหตุผลในไฟล์นั้น)
+import "./lib/prefer-ipv4"; // ต้องมาก่อน import อื่นที่ใช้เน็ต (ดูเหตุผลในไฟล์นั้น)
 
-import { config } from 'dotenv';
-import path from 'node:path';
+import { config } from "dotenv";
+import path from "node:path";
 
-config({ path: path.resolve(__dirname, '../.env.local') });
+config({ path: path.resolve(__dirname, "../.env.local") });
 
 // ถามผู้ให้บริการว่า "คีย์ของฉันเรียกรุ่นไหนได้บ้าง"
 //
@@ -24,33 +24,60 @@ type Provider = {
 
 const PROVIDERS: Record<string, Provider> = {
   groq: {
-    envKey: 'GROQ_API_KEY',
-    url: () => 'https://api.groq.com/openai/v1/models',
+    envKey: "GROQ_API_KEY",
+    url: () => "https://api.groq.com/openai/v1/models",
     headers: (apiKey) => ({ Authorization: `Bearer ${apiKey}` }),
-    extract: (json) => (json as { data?: { id: string }[] }).data?.map((m) => m.id) ?? [],
+    extract: (json) =>
+      (json as { data?: { id: string }[] }).data?.map((m) => m.id) ?? [],
   },
   mistral: {
-    envKey: 'MISTRAL_API_KEY',
-    url: () => 'https://api.mistral.ai/v1/models',
+    envKey: "MISTRAL_API_KEY",
+    url: () => "https://api.mistral.ai/v1/models",
     headers: (apiKey) => ({ Authorization: `Bearer ${apiKey}` }),
-    extract: (json) => (json as { data?: { id: string }[] }).data?.map((m) => m.id) ?? [],
+    extract: (json) =>
+      (json as { data?: { id: string }[] }).data?.map((m) => m.id) ?? [],
   },
   google: {
-    envKey: 'GOOGLE_GENERATIVE_AI_API_KEY',
+    envKey: "GOOGLE_GENERATIVE_AI_API_KEY",
     // Google ใส่คีย์มาใน query string ไม่ใช่ header
-    url: (apiKey) => `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
+    url: (apiKey) =>
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
     headers: () => ({}),
     extract: (json) =>
-      ((json as { models?: { name: string; supportedGenerationMethods?: string[] }[] }).models ?? [])
-        .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
-        .map((m) => m.name.replace(/^models\//, '')),
+      (
+        (
+          json as {
+            models?: { name: string; supportedGenerationMethods?: string[] }[];
+          }
+        ).models ?? []
+      )
+        .filter((m) =>
+          m.supportedGenerationMethods?.includes("generateContent"),
+        )
+        .map((m) => m.name.replace(/^models\//, "")),
+  },
+  openrouter: {
+    envKey: "OPENROUTER_API_KEY",
+    url: () => "https://openrouter.ai/api/v1/models",
+    headers: (apiKey) => ({ Authorization: `Bearer ${apiKey}` }),
+    extract: (json) =>
+      (json as { data?: { id: string }[] }).data?.map((m) => m.id) ?? [],
+  },
+  tokenrouter: {
+    envKey: "TOKENROUTER_API_KEY",
+    url: () => "https://api.tokenrouter.com/v1/models",
+    headers: (apiKey) => ({ Authorization: `Bearer ${apiKey}` }),
+    extract: (json) =>
+      (json as { data?: { id: string }[] }).data?.map((m) => m.id) ?? [],
   },
 };
 
 async function main() {
   const name = process.argv[2];
   if (!name || !PROVIDERS[name]) {
-    console.error(`ใช้: npm run db:list-models -- <${Object.keys(PROVIDERS).join('|')}>`);
+    console.error(
+      `ใช้: npm run db:list-models -- <${Object.keys(PROVIDERS).join("|")}>`,
+    );
     process.exit(1);
   }
 
@@ -66,7 +93,9 @@ async function main() {
     signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) {
-    console.error(`${name} ตอบ ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    console.error(
+      `${name} ตอบ ${res.status}: ${(await res.text()).slice(0, 300)}`,
+    );
     process.exit(1);
   }
 
@@ -81,6 +110,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('ดึงรายชื่อรุ่นล้มเหลว:', err);
+  console.error("ดึงรายชื่อรุ่นล้มเหลว:", err);
   process.exit(1);
 });

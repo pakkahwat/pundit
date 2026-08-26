@@ -36,19 +36,35 @@ Remove-Item Env:DATABASE_URL    # อย่าลืมล้างค่า ไ
 
 ใส่ใน Vercel → Project → Settings → Environment Variables (เลือก scope **Production**):
 
-| ตัวแปร | ค่า |
-| --- | --- |
-| `DATABASE_URL` | connection string แบบ pooled ของ Neon branch `production` |
-| `AUTH_SECRET` | สร้างใหม่สำหรับ prod (`npx auth secret` หรือ `openssl rand -base64 32`) — คนละตัวกับ dev |
-| `AUTH_URL` | `https://pundit.devda.fyi` |
-| `AUTH_GOOGLE_ID` | จาก Google Cloud Console (ตัวเดิมใช้ได้) |
-| `AUTH_GOOGLE_SECRET` | จาก Google Cloud Console |
-| `FOOTBALL_DATA_API_TOKEN` | token เดิมจาก football-data.org |
-| `GOOGLE_GENERATIVE_AI_API_KEY` | API key จาก Google AI Studio |
-| `CRON_SECRET` | สุ่มใหม่ยาว ๆ (`openssl rand -hex 32`) — ใช้ยืนยันตัวตนของ cron |
+| ตัวแปร                         | ค่า                                                                                      |
+| ------------------------------ | ---------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                 | connection string แบบ pooled ของ Neon branch `production`                                |
+| `AUTH_SECRET`                  | สร้างใหม่สำหรับ prod (`npx auth secret` หรือ `openssl rand -base64 32`) — คนละตัวกับ dev |
+| `AUTH_URL`                     | `https://pundit.devda.fyi`                                                               |
+| `AUTH_GOOGLE_ID`               | จาก Google Cloud Console (ตัวเดิมใช้ได้)                                                 |
+| `AUTH_GOOGLE_SECRET`           | จาก Google Cloud Console                                                                 |
+| `FOOTBALL_DATA_API_TOKEN`      | token เดิมจาก football-data.org                                                          |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | API key จาก Google AI Studio                                                             |
+| `OPENROUTER_API_KEY`           | API key จาก OpenRouter สำหรับ `stealth/ox-alpha`                                         |
+| `TOKENROUTER_API_KEY`          | API key จาก TokenRouter สำหรับ `qwen/qwen3.8-max-free`                                   |
+| `CRON_SECRET`                  | สุ่มใหม่ยาว ๆ (`openssl rand -hex 32`) — ใช้ยืนยันตัวตนของ cron                          |
 
 `AUTH_SECRET` ต้องเป็นคนละตัวกับ dev เพราะมันคือกุญแจเซ็น session ถ้าใช้ร่วมกัน
 session ที่ออกจากเครื่อง dev จะใช้กับ prod ได้ด้วย ซึ่งไม่ควร
+
+หลังเพิ่ม API keys บน Vercel แล้ว ต้อง deploy ใหม่เพื่อให้ฟังก์ชันอ่านค่า environment
+ชุดใหม่ได้ จากนั้นรัน seed กับฐานข้อมูล production หนึ่งครั้งจากเครื่อง local:
+
+```powershell
+$env:DATABASE_URL="<prod pooled connection string>"
+npm run db:seed-ai-agents
+npm run db:join-ai-agents-to-leagues
+Remove-Item Env:DATABASE_URL
+```
+
+คำสั่ง seed จะสร้าง/เปิดใช้งาน `open-router` และ
+`token-router-qwen-max-free` ใน production ส่วนคำสั่ง join จะเพิ่มทั้งคู่เข้า league
+เดิมที่มีอยู่แล้ว
 
 ---
 
@@ -87,12 +103,12 @@ Google Cloud Console → APIs & Services → Credentials → OAuth client ขอ
 Authorization: Bearer <ค่า CRON_SECRET ที่ตั้งไว้บน Vercel>
 ```
 
-| งาน | URL | ความถี่ที่แนะนำ |
-| --- | --- | --- |
-| sync ผลแข่ง | `https://pundit.devda.fyi/api/cron/sync-results` | ทุก 30 นาที |
-| คิดคะแนน | `https://pundit.devda.fyi/api/cron/score` | ทุก 30 นาที (หลัง sync) |
-| AI ทายผล | `https://pundit.devda.fyi/api/cron/ai-predictions` | ทุก 15 นาที |
-| เขียนบทความ | `https://pundit.devda.fyi/api/cron/article` | วันละครั้ง 08:00 |
+| งาน         | URL                                                | ความถี่ที่แนะนำ         |
+| ----------- | -------------------------------------------------- | ----------------------- |
+| sync ผลแข่ง | `https://pundit.devda.fyi/api/cron/sync-results`   | ทุก 30 นาที             |
+| คิดคะแนน    | `https://pundit.devda.fyi/api/cron/score`          | ทุก 30 นาที (หลัง sync) |
+| AI ทายผล    | `https://pundit.devda.fyi/api/cron/ai-predictions` | ทุก 15 นาที             |
+| เขียนบทความ | `https://pundit.devda.fyi/api/cron/article`        | วันละครั้ง 08:00        |
 
 **ทำไม AI ทายผลต้องถี่ถึง 15 นาที** — Vercel Hobby จำกัดฟังก์ชันที่ 60 วินาที แต่การให้ AI ทาย
 10 นัดต้องเว้นระยะตาม rate limit ของ Gemini ฟรี ทำไม่ทันในรอบเดียว งานจึงถูกออกแบบให้ทำเท่าที่ทัน
