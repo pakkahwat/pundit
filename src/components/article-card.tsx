@@ -3,15 +3,15 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 const MATCH_BANNER_IMAGES = [
-  "https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=1200&q=80",
-  "https://images.unsplash.com/photo-1547347298-4074fc3086f0?auto=format&fit=crop&w=1200&q=80",
-  "https://images.unsplash.com/photo-1517466787929-bc90951d0974?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1518091043644-c1d4457512c6?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1552318965-6e6be7484ad6?auto=format&fit=crop&w=1200&q=80",
 ];
 
 const PLAYER_FOCUS_IMAGES = [
-  "https://images.unsplash.com/photo-1521412644187-c49fa049e84d?auto=format&fit=crop&w=1200&q=80",
-  "https://images.unsplash.com/photo-1518604666860-9ed391f76460?auto=format&fit=crop&w=1200&q=80",
-  "https://images.unsplash.com/photo-1556056504-5c7696c4c28d?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1560272564-c83b66b1ad12?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1518091043644-c1d4457512c6?auto=format&fit=crop&w=1200&q=80",
 ];
 
 // การ์ดบทความที่กดแล้วเปิดเป็น dialog ลอยขึ้นมาอ่านเต็ม
@@ -108,27 +108,33 @@ function CoverArt({ title, urls }: { title: string; urls: string[] }) {
     normalizedTitle,
   );
   const fallbackPool = playerStory ? PLAYER_FOCUS_IMAGES : MATCH_BANNER_IMAGES;
-  const imagePool =
-    urls.length >= 6
-      ? playerStory
-        ? urls.slice(3, 6)
-        : urls.slice(0, 3)
-      : urls;
-  const selectedPool = imagePool.length > 0 ? imagePool : fallbackPool;
   const imageIndex =
     [...title].reduce((sum, character) => sum + character.charCodeAt(0), 0) %
-    selectedPool.length;
-  const imageUrl = selectedPool[imageIndex];
+    fallbackPool.length;
+  const articleImage = urls.find((url) => !isTeamCrestUrl(url));
+  const imageUrl = articleImage ?? fallbackPool[imageIndex];
+  const [imageSource, setImageSource] = useState(imageUrl);
+
+  useEffect(() => {
+    setImageSource(imageUrl);
+  }, [imageUrl]);
 
   return (
     <div className="relative aspect-[16/9] w-full overflow-hidden bg-slate-950 sm:aspect-[2.4/1]">
       <img
-        src={imageUrl}
+        src={imageSource}
         alt=""
         className={`absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] ${playerStory ? "object-center" : "object-[center_35%]"}`}
         loading="lazy"
+        onError={() => setImageSource(fallbackPool[0])}
       />
       <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
     </div>
+  );
+}
+
+function isTeamCrestUrl(url: string): boolean {
+  return /\.svg(?:$|[?#])|crest|logo|badge|team[-_]?image|football-data\.org/i.test(
+    url,
   );
 }

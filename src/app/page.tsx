@@ -236,7 +236,7 @@ export default async function Home(props: PageProps<"/">) {
             ที่คนเปิดเว็บซ้ำระหว่างวัน ("คืนนี้มีบอลอะไร ทายครบยัง") */}
         {todayMatches.length > 0 && (
           <section>
-            <SectionLabel>บอลวันนี้</SectionLabel>
+            <SectionLabel>บอลวันนี้ · พรีเมียร์ลีก</SectionLabel>
             <LiveMatches matches={todayMatches} />
             <LiveNotice />
           </section>

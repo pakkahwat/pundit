@@ -52,12 +52,10 @@ const SYSTEM_PROMPT = `คุณเป็นนักเขียนคอลั
 ถ้ามีประเด็นที่ AI ทายพลาดหรือทายแม่นกว่าคน ให้หยิบมาเล่นเป็นสีสันได้ เพราะนั่นคือจุดขายของเว็บนี้`;
 
 export const DEFAULT_ARTICLE_COVER_IMAGES = [
-  "https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=1200&q=80",
-  "https://images.unsplash.com/photo-1547347298-4074fc3086f0?auto=format&fit=crop&w=1200&q=80",
-  "https://images.unsplash.com/photo-1517466787929-bc90951d0974?auto=format&fit=crop&w=1200&q=80",
-  "https://images.unsplash.com/photo-1521412644187-c49fa049e84d?auto=format&fit=crop&w=1200&q=80",
-  "https://images.unsplash.com/photo-1518604666860-9ed391f76460?auto=format&fit=crop&w=1200&q=80",
-  "https://images.unsplash.com/photo-1556056504-5c7696c4c28d?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1518091043644-c1d4457512c6?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1552318965-6e6be7484ad6?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1560272564-c83b66b1ad12?auto=format&fit=crop&w=1200&q=80",
 ];
 
 export type ArticleSource = {
@@ -85,7 +83,12 @@ export type ArticleSource = {
     scored: number;
     correct: number;
   }[];
-  externalNews: { title: string; url?: string; source?: string }[];
+  externalNews: {
+    title: string;
+    url?: string;
+    source?: string;
+    imageUrl?: string;
+  }[];
   // ภาพหน้าปกแบบฟุตบอลจริง ไม่ใช่โลโก้ทีม เพื่อให้บรรยากาศข่าวดูเป็นสื่อฟุตบอลมากกว่าแบรนด์ทีม
   coverImageUrls: string[];
 };
@@ -95,9 +98,18 @@ export type StorySeed = {
   evidence: string[];
 };
 
+function decodeRssHtml(value: string): string {
+  return value
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
 export function parseRssItems(
   xml: string,
-): { title: string; url?: string; source?: string }[] {
+): { title: string; url?: string; source?: string; imageUrl?: string }[] {
   const items = [...xml.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)];
 
   return items
@@ -122,9 +134,26 @@ export function parseRssItems(
         .replace(/<!\[CDATA\[|\]\]>/g, "")
         .replace(/<[^>]+>/g, "")
         .trim();
+      const descriptionMatch = itemXml.match(
+        /<description(?:\s[^>]*)?>([\s\S]*?)<\/description>/i,
+      );
+      const decodedDescription = decodeRssHtml(descriptionMatch?.[1] ?? "");
+      const imageUrl =
+        itemXml.match(/<media:content[^>]+url=["']([^"']+)["']/i)?.[1] ??
+        itemXml.match(/<enclosure[^>]+url=["']([^"']+)["']/i)?.[1] ??
+        itemXml.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] ??
+        decodedDescription.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1];
+      const normalizedImageUrl = imageUrl?.startsWith("//")
+        ? `https:${imageUrl}`
+        : imageUrl;
 
       return title
-        ? { title, url: url || undefined, source: source || undefined }
+        ? {
+            title,
+            url: url || undefined,
+            source: source || undefined,
+            imageUrl: normalizedImageUrl || undefined,
+          }
         : undefined;
     })
     .filter((item): item is NonNullable<typeof item> => item !== undefined)
@@ -133,7 +162,9 @@ export function parseRssItems(
 
 async function fetchExternalNews(
   seasonName: string,
-): Promise<{ title: string; url?: string; source?: string }[]> {
+): Promise<
+  { title: string; url?: string; source?: string; imageUrl?: string }[]
+> {
   const queries = [
     `${seasonName} transfer news`,
     `${seasonName} injury news`,
@@ -361,6 +392,9 @@ export async function buildArticleSource(
   const externalNews = await fetchExternalNews(
     season?.name ?? "Premier League",
   );
+  const newsImages = externalNews
+    .map((item) => item.imageUrl)
+    .filter((url): url is string => Boolean(url));
 
   return {
     date: today,
@@ -392,7 +426,10 @@ export async function buildArticleSource(
       correct: a.correct,
     })),
     externalNews,
-    coverImageUrls: DEFAULT_ARTICLE_COVER_IMAGES,
+    coverImageUrls:
+      newsImages.length > 0
+        ? [...newsImages, ...DEFAULT_ARTICLE_COVER_IMAGES].slice(0, 6)
+        : DEFAULT_ARTICLE_COVER_IMAGES,
   };
 }
 

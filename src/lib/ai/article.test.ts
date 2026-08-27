@@ -3,7 +3,7 @@ process.env.DATABASE_URL ??= "postgres://user:pass@localhost:5432/postgres";
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildStorySeeds, type ArticleSource } from "./article";
+import { buildStorySeeds, parseRssItems, type ArticleSource } from "./article";
 
 const sampleSource: ArticleSource = {
   date: "2026-08-27",
@@ -105,4 +105,32 @@ test("buildStorySeeds leads with external news when there are no current fixture
 
   assert.equal(seeds[0]?.label, "ข่าวฟุตบอลรอบวันที่เกี่ยวกับลีก");
   assert.match(seeds[0]?.evidence[0] ?? "", /transfer|clubs/i);
+});
+
+test("parseRssItems keeps the source article image", () => {
+  const [item] = parseRssItems(`
+    <rss><channel><item>
+      <title>Premier League transfer update</title>
+      <link>https://example.com/story</link>
+      <source>Example News</source>
+      <media:content url="https://example.com/football.jpg" type="image/jpeg" />
+    </item></channel></rss>
+  `);
+
+  assert.equal(item?.imageUrl, "https://example.com/football.jpg");
+});
+
+test("parseRssItems extracts encoded Google News thumbnail images", () => {
+  const [item] = parseRssItems(`
+    <rss><channel><item>
+      <title>Premier League injury update</title>
+      <link>https://news.google.com/rss/articles/example</link>
+      <description>&lt;a href=&quot;https://example.com/story&quot;&gt;&lt;img src=&quot;//lh3.googleusercontent.com/football-image&quot;&gt;&lt;/a&gt;</description>
+    </item></channel></rss>
+  `);
+
+  assert.equal(
+    item?.imageUrl,
+    "https://lh3.googleusercontent.com/football-image",
+  );
 });

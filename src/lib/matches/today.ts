@@ -1,9 +1,10 @@
-import { sql } from 'drizzle-orm';
+import { sql } from "drizzle-orm";
 
-import { db } from '@/db/client';
-import { withUserContext } from '@/db/rls';
-import { predictions } from '@/db/schema';
-import { and, eq, inArray } from 'drizzle-orm';
+import { db } from "@/db/client";
+import { withUserContext } from "@/db/rls";
+import { predictions } from "@/db/schema";
+import { and, eq, inArray } from "drizzle-orm";
+import { getSportMonksPremierLeagueLive } from "@/lib/football/sportmonks";
 
 // ── "บอลวันนี้" สำหรับหน้าแรก ─────────────────────────────────────────────────
 //
@@ -14,6 +15,9 @@ import { and, eq, inArray } from 'drizzle-orm';
 // แต่ "นัดนี้กำลังแข่งอยู่หรือยัง" ไม่จำเป็นต้องถาม API เลย — เรารู้เวลาคิกออฟเป๊ะ ๆ อยู่แล้ว
 // ใน kickoff_at ตั้งแต่ตอน sync โปรแกรมแข่ง คำนวณเอาเองจึงตรงตามนาทีจริง ไม่มี delay
 // และแม่นกว่าการเชื่อ field status ที่ตัวมันเองก็ถูกหน่วงมาเหมือนกัน
+//
+// Live score บนหน้าแรกตั้งใจให้แสดงเฉพาะพรีเมียร์ลีกตาม product scope ตอนนี้
+// (โปรแกรมแข่งและหน้าทายผลยังรองรับทุกลีกตามเดิม)
 //
 // ช่วงเวลาที่ดึง: ย้อนหลัง 3 ชม. ถึงล่วงหน้า 24 ชม. — ครอบคลุมทั้งนัดที่กำลังเตะอยู่,
 // นัดที่เพิ่งจบ และนัดที่กำลังจะเตะคืนนี้ ใช้ช่วงเลื่อนแทนการตัดตามวันปฏิทิน เพราะบอลยุโรป
@@ -38,7 +42,18 @@ export type TodayMatch = {
 };
 
 export async function getTodayMatches(userId: string): Promise<TodayMatch[]> {
-  const rows = await db.execute<Omit<TodayMatch, 'predicted'> & { inMyLeague: boolean }>(sql`
+  const sportMonksMatches = await getSportMonksPremierLeagueLive();
+  if (sportMonksMatches && sportMonksMatches.length > 0) {
+    return sportMonksMatches.map((match) => ({
+      ...match,
+      competitionCode: "PL",
+      predicted: null,
+    }));
+  }
+
+  const rows = await db.execute<
+    Omit<TodayMatch, "predicted"> & { inMyLeague: boolean }
+  >(sql`
     select
       m.id,
       m.kickoff_at as "kickoffAt",
@@ -62,7 +77,8 @@ export async function getTodayMatches(userId: string): Promise<TodayMatch[]> {
     join seasons s on s.id = m.season_id and s.is_active = true
     join teams ht on ht.id = m.home_team_id
     join teams at on at.id = m.away_team_id
-    where m.kickoff_at between now() - interval '3 hours' and now() + interval '24 hours'
+    where s.competition_code = 'PL'
+      and m.kickoff_at between now() - interval '3 hours' and now() + interval '24 hours'
     order by m.kickoff_at asc
   `);
 
@@ -74,7 +90,9 @@ export async function getTodayMatches(userId: string): Promise<TodayMatch[]> {
     tx
       .select({ matchId: predictions.matchId })
       .from(predictions)
-      .where(and(eq(predictions.userId, userId), inArray(predictions.matchId, ids))),
+      .where(
+        and(eq(predictions.userId, userId), inArray(predictions.matchId, ids)),
+      ),
   );
   const predictedIds = new Set(mine.map((p) => p.matchId));
 
