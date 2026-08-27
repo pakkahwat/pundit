@@ -1,14 +1,14 @@
-import { eq } from 'drizzle-orm';
-import Link from 'next/link';
+import { eq } from "drizzle-orm";
+import Link from "next/link";
 
-import { auth, signOut } from '@/auth';
-import { db } from '@/db/client';
-import { users } from '@/db/schema';
-import { displayNameSql } from '@/lib/display-name';
+import { auth, signOut } from "@/auth";
+import { db } from "@/db/client";
+import { users } from "@/db/schema";
+import { displayNameSql } from "@/lib/display-name";
 
-import { Logo } from './logo';
-import { NavLink } from './nav-link';
-import { SubmitButton } from '@/components/submit-button';
+import { Logo } from "./logo";
+import { NavLink } from "./nav-link";
+import { SubmitButton } from "@/components/submit-button";
 
 // session ของ Auth.js เก็บชื่อจาก Google ไว้ ไม่รู้จัก display_name ที่ผู้ใช้ตั้งเอง เลยต้องอ่าน
 // จาก DB ตรง ๆ — ทำที่นี่ที่เดียวเพราะแถบหัวเว็บอยู่ใน layout จึงเรนเดอร์ทุกหน้าอยู่แล้ว
@@ -18,7 +18,7 @@ async function currentDisplayName(userId: string) {
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
-  return row?.name ?? '';
+  return row?.name ?? "";
 }
 
 // แถบหัวเว็บที่อยู่ทุกหน้า — เป็น async Server Component เรียก auth() เองได้เลย ไม่ต้องให้แต่ละหน้า
@@ -38,16 +38,23 @@ export async function SiteHeader() {
     <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur">
       <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
         <div className="flex items-center justify-between gap-4 py-3">
-          <Link href="/" className="shrink-0 transition-opacity hover:opacity-80">
+          <Link
+            href="/"
+            className="shrink-0 transition-opacity hover:opacity-80"
+          >
             <Logo />
           </Link>
 
           {signedIn && (
-            <nav className="hidden items-center gap-1 md:flex" aria-label="เมนูหลัก">
+            <nav
+              className="hidden items-center gap-1 md:flex"
+              aria-label="เมนูหลัก"
+            >
               <NavLink href="/">หน้าแรก</NavLink>
               <NavLink href="/leagues">ลีกของฉัน</NavLink>
               <NavLink href="/vs-ai">คนปะทะ AI</NavLink>
               <NavLink href="/standings">ตารางคะแนน</NavLink>
+              <NavLink href="/fixtures">โปรแกรมแข่ง</NavLink>
               <NavLink href="/news">คอลัมน์</NavLink>
             </nav>
           )}
@@ -62,7 +69,7 @@ export async function SiteHeader() {
               </Link>
               <form
                 action={async () => {
-                  'use server';
+                  "use server";
                   await signOut();
                 }}
               >
@@ -84,6 +91,7 @@ export async function SiteHeader() {
             <NavLink href="/leagues">ลีกของฉัน</NavLink>
             <NavLink href="/vs-ai">คนปะทะ AI</NavLink>
             <NavLink href="/standings">ตารางคะแนน</NavLink>
+            <NavLink href="/fixtures">โปรแกรมแข่ง</NavLink>
             <NavLink href="/news">คอลัมน์</NavLink>
           </nav>
         )}

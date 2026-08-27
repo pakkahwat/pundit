@@ -1,12 +1,12 @@
-import { and, asc, count, desc, eq, gt, inArray, sql } from 'drizzle-orm';
-import Link from 'next/link';
+import { and, asc, count, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import Link from "next/link";
 
-import { auth, signIn } from '@/auth';
-import { ArticleBody } from '@/components/article-body';
-import { ArticleCard } from '@/components/article-card';
-import { Hero } from '@/components/hero';
-import { Landing } from '@/components/landing';
-import { LiveMatches, LiveNotice } from '@/components/live-matches';
+import { auth, signIn } from "@/auth";
+import { ArticleBody } from "@/components/article-body";
+import { ArticleCard } from "@/components/article-card";
+import { Hero } from "@/components/hero";
+import { Landing } from "@/components/landing";
+import { LiveMatches, LiveNotice } from "@/components/live-matches";
 import {
   Badge,
   Card,
@@ -15,9 +15,9 @@ import {
   PageShell,
   Pagination,
   SectionLabel,
-} from '@/components/ui';
-import { db } from '@/db/client';
-import { withUserContext } from '@/db/rls';
+} from "@/components/ui";
+import { db } from "@/db/client";
+import { withUserContext } from "@/db/rls";
 import {
   articles,
   leagueMembers,
@@ -26,11 +26,11 @@ import {
   predictions,
   seasons,
   users,
-} from '@/db/schema';
-import { displayNameSql } from '@/lib/display-name';
-import { getTodayMatches } from '@/lib/matches/today';
-import { SubmitButton } from '@/components/submit-button';
-import { getCurrentMatchdays } from '@/lib/matches/current-matchday';
+} from "@/db/schema";
+import { displayNameSql } from "@/lib/display-name";
+import { getTodayMatches } from "@/lib/matches/today";
+import { SubmitButton } from "@/components/submit-button";
+import { getCurrentMatchdays } from "@/lib/matches/current-matchday";
 
 // นี่คือ Server Component (ไม่มี "use client" ด้านบน) — รันบน server เท่านั้น เรียก auth()
 // อ่าน session ตรง ๆ ได้เลยโดยไม่ต้องส่ง API call จาก browser แบบที่ Vue/Nuxt SPA เคยทำ
@@ -40,38 +40,46 @@ import { getCurrentMatchdays } from '@/lib/matches/current-matchday';
 function formatArticleDate(publishedOn: string) {
   // publishedOn เป็น date ล้วน (YYYY-MM-DD) จาก Postgres — ต่อ T00:00:00Z แล้วระบุ timeZone
   // เป็น UTC ตอนแสดงผล เพื่อไม่ให้ JS ตีความเป็นเวลาท้องถิ่นแล้วเลื่อนไปหนึ่งวัน
-  return new Intl.DateTimeFormat('th-TH', {
-    timeZone: 'UTC',
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
+  return new Intl.DateTimeFormat("th-TH", {
+    timeZone: "UTC",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
   }).format(new Date(`${publishedOn}T00:00:00Z`));
 }
 
 // ตัดย่อหน้าแรกมาโชว์บนการ์ด — ลอก markdown ตัวหนาออกก่อนเพื่อไม่ให้เห็น ** ดิบ ๆ
 function excerptOf(body: string): string {
-  const first = body.split(/\n{2,}/)[0]?.replace(/\*\*/g, '').trim() ?? '';
+  const first =
+    body
+      .split(/\n{2,}/)[0]
+      ?.replace(/\*\*/g, "")
+      .trim() ?? "";
   return first.length > 160 ? `${first.slice(0, 160)}…` : first;
 }
 
 const ARTICLES_PER_PAGE = 6;
 
-export default async function Home(props: PageProps<'/'>) {
+export default async function Home(props: PageProps<"/">) {
   const session = await auth();
 
   if (!session?.user?.id) {
     // ตัวเลขบนหน้า landing ต้องเป็นของจริง ไม่ใช่ตัวเลขตกแต่ง — ยิงสามอันพร้อมกันด้วย
     // Promise.all เพราะไม่มีอันไหนต้องรอผลของอีกอัน
-    const [[{ leagueCount }], [{ matchCount }], [{ aiPlayerCount }]] = await Promise.all([
-      db.select({ leagueCount: count() }).from(leagues),
-      db
-        .select({ matchCount: count() })
-        .from(matches)
-        .innerJoin(seasons, eq(seasons.id, matches.seasonId))
-        .where(eq(seasons.isActive, true)),
-      db.select({ aiPlayerCount: count() }).from(users).where(eq(users.playerKind, 'ai')),
-    ]);
+    const [[{ leagueCount }], [{ matchCount }], [{ aiPlayerCount }]] =
+      await Promise.all([
+        db.select({ leagueCount: count() }).from(leagues),
+        db
+          .select({ matchCount: count() })
+          .from(matches)
+          .innerJoin(seasons, eq(seasons.id, matches.seasonId))
+          .where(eq(seasons.isActive, true)),
+        db
+          .select({ aiPlayerCount: count() })
+          .from(users)
+          .where(eq(users.playerKind, "ai")),
+      ]);
 
     return (
       <Landing
@@ -81,8 +89,8 @@ export default async function Home(props: PageProps<'/'>) {
         loginButton={
           <form
             action={async () => {
-              'use server';
-              await signIn('google');
+              "use server";
+              await signIn("google");
             }}
           >
             <SubmitButton className="px-6 py-2.5 text-base">
@@ -99,7 +107,9 @@ export default async function Home(props: PageProps<'/'>) {
   // อ่านเลขหน้าจาก ?page= — searchParams เป็น Promise ใน Next 16 เหมือน params
   // กันค่าเพี้ยน (page=abc, page=-1, page=999) ด้วยการ clamp ทีหลังเมื่อรู้จำนวนหน้าจริงแล้ว
   const searchParams = await props.searchParams;
-  const rawPage = Number(Array.isArray(searchParams.page) ? searchParams.page[0] : searchParams.page);
+  const rawPage = Number(
+    Array.isArray(searchParams.page) ? searchParams.page[0] : searchParams.page,
+  );
   const requestedPage = Number.isInteger(rawPage) && rawPage > 0 ? rawPage : 1;
 
   const [myLeagues, [{ total }], [me], todayMatches] = await Promise.all([
@@ -115,13 +125,19 @@ export default async function Home(props: PageProps<'/'>) {
       .where(eq(leagueMembers.userId, userId))
       .orderBy(asc(leagues.name)),
     db.select({ total: count() }).from(articles),
-    db.select({ name: displayNameSql }).from(users).where(eq(users.id, userId)).limit(1),
+    db
+      .select({ name: displayNameSql })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1),
     getTodayMatches(userId),
   ]);
 
   // แมตช์เดย์ปัจจุบันของทุกลีกในคำสั่งเดียว — ไม่ได้อ่านจาก seasons.current_matchday เพราะค่านั้น
   // มาจากผู้ให้บริการและเดินหน้าก่อนที่แมตช์เดย์ปัจจุบันจะเตะครบ (ดู lib/matches/current-matchday.ts)
-  const matchdayBySeason = await getCurrentMatchdays(myLeagues.map((l) => l.seasonId));
+  const matchdayBySeason = await getCurrentMatchdays(
+    myLeagues.map((l) => l.seasonId),
+  );
 
   const totalPages = Math.max(1, Math.ceil(total / ARTICLES_PER_PAGE));
   const page = Math.min(requestedPage, totalPages);
@@ -147,7 +163,11 @@ export default async function Home(props: PageProps<'/'>) {
   // ทำเป็น 2 query รวม (ไม่ใช่ query ต่อลีก) เพื่อไม่ให้จำนวน query โตตามจำนวนลีก
   const openMatches = myLeagues.length
     ? await db
-        .select({ id: matches.id, seasonId: matches.seasonId, matchday: matches.matchday })
+        .select({
+          id: matches.id,
+          seasonId: matches.seasonId,
+          matchday: matches.matchday,
+        })
         .from(matches)
         .where(
           and(
@@ -193,15 +213,20 @@ export default async function Home(props: PageProps<'/'>) {
       ).length,
     ]),
   );
-  const totalPending = [...pendingCountByLeague.values()].reduce((a, b) => a + b, 0);
+  const totalPending = [...pendingCountByLeague.values()].reduce(
+    (a, b) => a + b,
+    0,
+  );
 
   return (
     <PageShell width="xl">
       <div className="flex flex-col gap-10">
         <Hero
-          userName={me?.name ?? ''}
+          userName={me?.name ?? ""}
           matchday={
-            myLeagues[0] ? (matchdayBySeason.get(myLeagues[0].seasonId) ?? null) : null
+            myLeagues[0]
+              ? (matchdayBySeason.get(myLeagues[0].seasonId) ?? null)
+              : null
           }
           leagueCount={myLeagues.length}
           pendingCount={totalPending}
@@ -223,7 +248,13 @@ export default async function Home(props: PageProps<'/'>) {
         <section>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <SectionLabel>ลีกของคุณ</SectionLabel>
-            <span className="mb-2 flex gap-2">
+            <span className="mb-2 flex flex-wrap gap-2">
+              <LinkButton href="/standings" size="sm" variant="secondary">
+                ตารางคะแนน
+              </LinkButton>
+              <LinkButton href="/fixtures" size="sm" variant="secondary">
+                โปรแกรมแข่ง
+              </LinkButton>
               <LinkButton href="/leagues" size="sm" variant="secondary">
                 เข้าร่วมลีกอื่น
               </LinkButton>
@@ -253,12 +284,16 @@ export default async function Home(props: PageProps<'/'>) {
                 return (
                   <li key={l.id}>
                     <Link
-                      href={pending > 0 ? `/leagues/${l.id}/predict` : `/leagues/${l.id}`}
+                      href={
+                        pending > 0
+                          ? `/leagues/${l.id}/predict`
+                          : `/leagues/${l.id}`
+                      }
                       className="block h-full"
                     >
                       <Card
                         className={`flex h-full animate-fade-up flex-col justify-between gap-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-accent/50 hover:bg-surface-hover ${
-                          pending > 0 ? 'border-accent/40' : ''
+                          pending > 0 ? "border-accent/40" : ""
                         }`}
                       >
                         <div className="min-w-0">
@@ -268,18 +303,22 @@ export default async function Home(props: PageProps<'/'>) {
                           <p className="mt-0.5 text-xs text-muted">
                             {matchdayBySeason.has(l.seasonId)
                               ? `แมตช์เดย์ ${matchdayBySeason.get(l.seasonId)}`
-                              : 'ยังไม่เริ่ม'}
+                              : "ยังไม่เริ่ม"}
                           </p>
                         </div>
 
                         {pending > 0 ? (
                           <span className="flex items-center justify-between gap-2">
                             <Badge tone="accent">ยังไม่ทาย {pending} นัด</Badge>
-                            <span className="text-xs font-medium text-accent">ทายเลย →</span>
+                            <span className="text-xs font-medium text-accent">
+                              ทายเลย →
+                            </span>
                           </span>
                         ) : (
                           <span className="flex items-center justify-between gap-2">
-                            <span className="text-xs text-muted">ทายครบแล้ว</span>
+                            <span className="text-xs text-muted">
+                              ทายครบแล้ว
+                            </span>
                             <span className="text-xs text-muted">ดูลีก →</span>
                           </span>
                         )}
@@ -309,7 +348,8 @@ export default async function Home(props: PageProps<'/'>) {
 
           {recentArticles.length === 0 ? (
             <EmptyState>
-              ยังไม่มีบทความ — รัน <code className="font-mono">npm run db:generate-article</code>{' '}
+              ยังไม่มีบทความ — รัน{" "}
+              <code className="font-mono">npm run db:generate-article</code>{" "}
               เพื่อให้ AI เขียนฉบับแรก
             </EmptyState>
           ) : (
@@ -333,7 +373,7 @@ export default async function Home(props: PageProps<'/'>) {
               <Pagination
                 page={page}
                 totalPages={totalPages}
-                hrefFor={(p) => (p === 1 ? '/' : `/?page=${p}`)}
+                hrefFor={(p) => (p === 1 ? "/" : `/?page=${p}`)}
               />
             </>
           )}

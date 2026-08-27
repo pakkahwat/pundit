@@ -1,7 +1,18 @@
-'use client';
+"use client";
 
-import Image from 'next/image';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from "react";
+
+const MATCH_BANNER_IMAGES = [
+  "https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1547347298-4074fc3086f0?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1517466787929-bc90951d0974?auto=format&fit=crop&w=1200&q=80",
+];
+
+const PLAYER_FOCUS_IMAGES = [
+  "https://images.unsplash.com/photo-1521412644187-c49fa049e84d?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1518604666860-9ed391f76460?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1556056504-5c7696c4c28d?auto=format&fit=crop&w=1200&q=80",
+];
 
 // การ์ดบทความที่กดแล้วเปิดเป็น dialog ลอยขึ้นมาอ่านเต็ม
 //
@@ -44,10 +55,12 @@ export function ArticleCard({
         onClick={() => setOpen(true)}
         className="group animate-fade-up w-full overflow-hidden rounded-xl border border-border bg-surface text-left transition-all duration-200 hover:-translate-y-0.5 hover:bg-surface-hover hover:shadow-lg"
       >
-        <CoverArt urls={coverImageUrls} />
+        <CoverArt title={title} urls={coverImageUrls} />
         <div className="p-5">
           <p className="text-xs text-muted">{dateLabel}</p>
-          <p className="mt-1 font-display text-lg font-semibold text-foreground">{title}</p>
+          <p className="mt-1 font-display text-lg font-semibold text-foreground">
+            {title}
+          </p>
           <p className="mt-1 line-clamp-2 text-sm text-muted">{excerpt}</p>
         </div>
       </button>
@@ -62,7 +75,7 @@ export function ArticleCard({
         className="animate-pop-in m-auto w-[min(42rem,calc(100vw-2rem))] rounded-xl border border-border bg-surface p-0 text-foreground backdrop:bg-black/60 backdrop:backdrop-blur-sm"
       >
         <div className="max-h-[85vh] overflow-y-auto">
-          <CoverArt urls={coverImageUrls} />
+          <CoverArt title={title} urls={coverImageUrls} />
           <div className="p-6">
             <div className="mb-4 flex items-start justify-between gap-4">
               <div className="min-w-0">
@@ -88,30 +101,34 @@ export function ArticleCard({
   );
 }
 
-// ภาพหน้าปก: โลโก้ทีมจริงจาก football-data.org วางซ้อนบนพื้นไล่สี — ไม่ได้ generate ภาพด้วย AI
-// เพราะเปลืองโควตาและเสี่ยงได้ภาพที่ไม่ตรงกับเนื้อหา ส่วนโลโก้ทีมเป็นของจริงเสมอ
-function CoverArt({ urls }: { urls: string[] }) {
+// เลือกภาพตามมุมข่าว: ข่าวเกมใช้ภาพกว้าง ส่วนข่าวตัวบุคคลใช้ภาพที่โฟกัสนักเตะมากกว่า
+function CoverArt({ title, urls }: { title: string; urls: string[] }) {
+  const normalizedTitle = title.toLowerCase();
+  const playerStory = /ย้าย|บาดเจ็บ|เจ็บ|ความพร้อม|transfer|injury|squad/.test(
+    normalizedTitle,
+  );
+  const fallbackPool = playerStory ? PLAYER_FOCUS_IMAGES : MATCH_BANNER_IMAGES;
+  const imagePool =
+    urls.length >= 6
+      ? playerStory
+        ? urls.slice(3, 6)
+        : urls.slice(0, 3)
+      : urls;
+  const selectedPool = imagePool.length > 0 ? imagePool : fallbackPool;
+  const imageIndex =
+    [...title].reduce((sum, character) => sum + character.charCodeAt(0), 0) %
+    selectedPool.length;
+  const imageUrl = selectedPool[imageIndex];
+
   return (
-    <div className="relative flex h-32 items-center justify-center gap-3 overflow-hidden bg-gradient-to-br from-accent/25 via-accent/10 to-transparent">
-      {urls.length === 0 ? (
-        <span className="font-display text-3xl font-semibold text-accent/40">Pundit</span>
-      ) : (
-        urls.slice(0, 3).map((url) => (
-          <span
-            key={url}
-            className="flex h-16 w-16 items-center justify-center rounded-full bg-surface/80 p-2.5 shadow-sm ring-1 ring-border transition-transform duration-300 group-hover:scale-110"
-          >
-            <Image
-              src={url}
-              alt=""
-              width={44}
-              height={44}
-              className="h-full w-full object-contain"
-              unoptimized
-            />
-          </span>
-        ))
-      )}
+    <div className="relative aspect-[16/9] w-full overflow-hidden bg-slate-950 sm:aspect-[2.4/1]">
+      <img
+        src={imageUrl}
+        alt=""
+        className={`absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] ${playerStory ? "object-center" : "object-[center_35%]"}`}
+        loading="lazy"
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
     </div>
   );
 }
