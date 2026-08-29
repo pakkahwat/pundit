@@ -9,7 +9,9 @@
 ## Stack
 
 Next.js 16 (App Router) · TypeScript · Postgres บน Neon · Drizzle ORM · Auth.js (Google)
-Tailwind CSS v4 · Vercel AI SDK (Gemini) · ข้อมูลฟุตบอลจาก football-data.org
+Tailwind CSS v4 · Vercel AI SDK (Gemini, Groq, Mistral, OpenRouter, TokenRouter)
+ข้อมูลฟุตบอลจาก football-data.org · สกอร์สดพรีเมียร์ลีกจาก SportMonks
+ภาพหน้าปกบทความจาก Google News RSS และ Pexels
 
 ## เริ่มพัฒนา
 
@@ -31,6 +33,7 @@ npm run dev                        # http://localhost:3001
 | `npm run db:run-ai-predictions` | ให้ AI ทายผลนัดที่ยังไม่ปิดรับ |
 | `npm run db:generate-article` | ให้ AI เขียนคอลัมน์ประจำวัน |
 | `npm run db:studio` | เปิด Drizzle Studio ดู/แก้ข้อมูล |
+| `npm test` | เทสต์ตรรกะล้วน ๆ (ไม่ต้องมีฐานข้อมูล) |
 | `npm run db:reset-play -- --yes` | ล้างคำทาย/คะแนน/ลีก แต่เก็บข้อมูลฟุตบอลไว้ |
 
 งานสี่ตัวแรกมี HTTP endpoint คู่กันที่ `/api/cron/*` สำหรับให้ scheduler ยิงตอน production
@@ -50,13 +53,21 @@ npm run dev                        # http://localhost:3001
    (`FORCE ROW LEVEL SECURITY`) ต่อให้เขียน query ผิดก็ยังหลุดไม่ได้
 5. **AI ไม่ได้เปรียบ** — เขียนคำทายผ่านฟังก์ชันเดียวกับมนุษย์ทุกตัวอักษร และ context ที่เห็น
    ถูกกรองด้วย `kickoff_at` ของแมตช์เป้าหมายเสมอ จึงไม่มีทางเห็นข้อมูลหลังเตะ
-6. **ไม่ยิง API เกินโควตาฟรี** — แคชผ่านตาราง `api_cache` และ fallback ไปข้อมูลเก่าเมื่อ API ล่ม
+6. **ไม่ยิง API เกินโควตาฟรี** — เรียก football-data.org ผ่านแคชในตาราง `api_cache`
+   และ fallback ไปข้อมูลเก่าเมื่อ API ล่ม
+7. **สกอร์สดต้องไม่ทำให้ข้อมูลอื่นหาย** — แผนฟรีของ football-data.org ให้สกอร์แบบหน่วงเวลา
+   เราจึงขอเฉพาะสกอร์สดของพรีเมียร์ลีกจาก SportMonks มา **ทับทีละฟิลด์** บนโปรแกรมแข่งของเราเอง
+   (`src/lib/matches/live-overlay.ts`) ไม่ใช่เอารายการของ SportMonks มาแทนทั้งดุ้น เพราะ id คนละชุดกัน
+   ถ้าแทนทั้งรายการ ป้าย "ยังไม่ทาย" จะหายทั้งหน้า และนัดที่ยังไม่เตะก็จะหายไปด้วย
+   แคชด้วย `next: { revalidate: 30 }` ของ Next ไม่ได้ผ่าน `api_cache` และไม่มี token ก็ยังใช้งานได้ปกติ
 
 ## โครงสร้างที่ควรรู้
 
 ```
 src/lib/jobs/        ตรรกะงาน cron — ใช้ร่วมกันระหว่าง scripts/ กับ /api/cron/*
-src/lib/football/    คุยกับ football-data.org (ตารางคะแนน, ทีม, h2h) + แคช
+src/lib/football/    คุยกับ football-data.org (ตารางคะแนน, ทีม, h2h) + แคช, SportMonks (สกอร์สด)
+src/lib/matches/     แมตช์เดย์ปัจจุบัน, บอลวันนี้, ทับสกอร์สด
 src/lib/ai/          ผู้เล่น AI: สร้าง context, baseline, เรียก LLM, เขียนบทความ
+                     article-cover.ts จำแนกหัวข้อบทความเพื่อเลือกภาพหน้าปกให้ตรงเรื่อง
 src/db/schema.sql    แหล่งความจริงของโครงสร้างฐานข้อมูล (schema.ts แปลตามไฟล์นี้)
 ```

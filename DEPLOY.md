@@ -47,7 +47,21 @@ Remove-Item Env:DATABASE_URL    # อย่าลืมล้างค่า ไ
 | `GOOGLE_GENERATIVE_AI_API_KEY` | API key จาก Google AI Studio                                                             |
 | `OPENROUTER_API_KEY`           | API key จาก OpenRouter สำหรับ `stealth/ox-alpha`                                         |
 | `TOKENROUTER_API_KEY`          | API key จาก TokenRouter สำหรับ `qwen/qwen3.8-max-free`                                   |
+| `GROQ_API_KEY`                 | API key จาก Groq สำหรับ `openai/gpt-oss-120b` และ `openai/gpt-oss-20b`                   |
+| `MISTRAL_API_KEY`              | API key จาก Mistral สำหรับ `mistral-small-latest`                                        |
+| `SPORTMONKS_API_TOKEN`         | API token จาก SportMonks — ใช้ดึงสกอร์สดของพรีเมียร์ลีกบนหน้าแรก                          |
+| `PEXELS_API_KEY`               | API key จาก pexels.com/api — ภาพสำรองของหน้าปกบทความ (ฟรี 200 req/ชม.)                    |
 | `CRON_SECRET`                  | สุ่มใหม่ยาว ๆ (`openssl rand -hex 32`) — ใช้ยืนยันตัวตนของ cron                          |
+
+สองอย่างนี้พลาดแล้วไม่มี error ให้เห็น จึงต้องเช็คด้วยตาเอง:
+
+- **ขาด key ของ provider ไหน AI ตัวนั้นจะถูกข้ามเงียบ ๆ** (ตั้งใจให้เป็นแบบนี้ เพื่อให้เพิ่มผู้เล่น AI
+  ใหม่ได้ก่อนสมัคร key — ดู `hasApiKey` ใน `src/lib/ai/llm.ts`) ถ้าลืม `GROQ_API_KEY` หรือ
+  `MISTRAL_API_KEY` จะเหลือ AI ทายแค่บางตัว โดยที่ไม่มีอะไรฟ้องเลย
+- **ขาด `SPORTMONKS_API_TOKEN` แล้วสกอร์สดจะเงียบไปเฉย ๆ** หน้าแรกจะกลับไปใช้สกอร์หน่วงเวลา
+  ของ football-data.org แทน (`getSportMonksPremierLeagueLive` คืน `null` ทันทีเมื่อไม่มี token)
+- **ขาด `PEXELS_API_KEY` แล้วหน้าปกบทความจะตกไปใช้รูปสต็อกในโค้ด** ซึ่งมีอยู่ไม่กี่ใบ
+  จึงเห็นรูปซ้ำกันได้ (ลำดับการหาคือ ข่าวจริง → Pexels → รูปในโค้ด ดู `lib/ai/article-cover-fetch.ts`)
 
 `AUTH_SECRET` ต้องเป็นคนละตัวกับ dev เพราะมันคือกุญแจเซ็น session ถ้าใช้ร่วมกัน
 session ที่ออกจากเครื่อง dev จะใช้กับ prod ได้ด้วย ซึ่งไม่ควร

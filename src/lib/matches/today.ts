@@ -5,16 +5,22 @@ import { withUserContext } from "@/db/rls";
 import { predictions } from "@/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { getSportMonksPremierLeagueLive } from "@/lib/football/sportmonks";
+import { overlayLiveScores } from "@/lib/matches/live-overlay";
 
 // ── "บอลวันนี้" สำหรับหน้าแรก ─────────────────────────────────────────────────
 //
 // เรื่องสำคัญที่ต้องรู้ก่อนอ่านไฟล์นี้: แผนฟรีของ football-data.org ไม่ส่งสกอร์สดมาให้
-// (หน้า pricing ระบุตรง ๆ ว่า "Scores delayed" — ต้องขึ้นแผน €12/เดือนถึงจะได้ live)
-// สกอร์ในตาราง matches จึงเก่าได้ถึงประมาณ 30 นาทีตามรอบ cron sync-results
+// (หน้า pricing ระบุตรง ๆ ว่า "Scores delayed") สกอร์ในตาราง matches จึงเก่าได้ถึงราว 30 นาที
+// ตามรอบ cron sync-results — เราจึงไปขอ "เฉพาะสกอร์สด" จาก SportMonks มาทับอีกที
 //
-// แต่ "นัดนี้กำลังแข่งอยู่หรือยัง" ไม่จำเป็นต้องถาม API เลย — เรารู้เวลาคิกออฟเป๊ะ ๆ อยู่แล้ว
-// ใน kickoff_at ตั้งแต่ตอน sync โปรแกรมแข่ง คำนวณเอาเองจึงตรงตามนาทีจริง ไม่มี delay
-// และแม่นกว่าการเชื่อ field status ที่ตัวมันเองก็ถูกหน่วงมาเหมือนกัน
+// จุดที่ต้องระวังที่สุด: ทับได้เฉพาะ "สกอร์กับสถานะ" เท่านั้น ห้ามเอาแมตช์ของ SportMonks มาแทน
+// ทั้งรายการ เพราะ id คนละชุดกับ matches ของเรา ถ้าแทนทั้งดุ้นจะเชื่อมกลับไปหาคำทายของผู้ใช้ไม่ได้
+// (ป้าย "ยังไม่ทาย" จะหายไปทั้งหน้า) แถมนัดที่ยังไม่เตะกับนัดที่เพิ่งจบก็จะหายไปด้วย เพราะ endpoint
+// inplay คืนมาเฉพาะนัดที่กำลังเตะอยู่
+//
+// "นัดนี้กำลังแข่งอยู่หรือยัง" ไม่จำเป็นต้องถาม API เลย — เรารู้เวลาคิกออฟเป๊ะ ๆ อยู่แล้วใน kickoff_at
+// ตั้งแต่ตอน sync โปรแกรมแข่ง คำนวณเอาเองจึงตรงตามนาทีจริง ไม่มี delay และแม่นกว่าการเชื่อ field
+// status ที่ตัวมันเองก็ถูกหน่วงมาเหมือนกัน
 //
 // Live score บนหน้าแรกตั้งใจให้แสดงเฉพาะพรีเมียร์ลีกตาม product scope ตอนนี้
 // (โปรแกรมแข่งและหน้าทายผลยังรองรับทุกลีกตามเดิม)
@@ -39,20 +45,13 @@ export type TodayMatch = {
   secondsSinceKickoff: number;
   /** ผู้ใช้คนนี้ทายนัดนี้แล้วหรือยัง — null ถ้านัดนี้ไม่ได้อยู่ในลีกที่เขาเล่น */
   predicted: boolean | null;
+  /** true = สกอร์ในแถวนี้เป็นสกอร์สดจริงจาก SportMonks ไม่ใช่ค่าหน่วงเวลาใน DB */
+  live: boolean;
 };
 
 export async function getTodayMatches(userId: string): Promise<TodayMatch[]> {
-  const sportMonksMatches = await getSportMonksPremierLeagueLive();
-  if (sportMonksMatches && sportMonksMatches.length > 0) {
-    return sportMonksMatches.map((match) => ({
-      ...match,
-      competitionCode: "PL",
-      predicted: null,
-    }));
-  }
-
   const rows = await db.execute<
-    Omit<TodayMatch, "predicted"> & { inMyLeague: boolean }
+    Omit<TodayMatch, "predicted" | "live"> & { inMyLeague: boolean }
   >(sql`
     select
       m.id,
@@ -96,8 +95,15 @@ export async function getTodayMatches(userId: string): Promise<TodayMatch[]> {
   );
   const predictedIds = new Set(mine.map((p) => p.matchId));
 
-  return rows.map(({ inMyLeague, ...r }) => ({
+  const base: TodayMatch[] = rows.map(({ inMyLeague, ...r }) => ({
     ...r,
     predicted: inMyLeague ? predictedIds.has(r.id) : null,
+    live: false,
   }));
+
+  // SportMonks ล่มหรือไม่ได้ตั้ง token ก็ยังใช้งานได้ตามปกติ แค่สกอร์หน่วงเวลาเหมือนเดิม
+  const live = await getSportMonksPremierLeagueLive();
+  if (!live || live.length === 0) return base;
+
+  return overlayLiveScores(base, live);
 }

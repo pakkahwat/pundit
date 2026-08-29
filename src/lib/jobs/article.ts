@@ -1,6 +1,11 @@
 import type postgres from 'postgres';
 
 import { buildArticleSource, generateArticle } from '@/lib/ai/article';
+import { resolveFixture, teamNamesFromSource } from '@/lib/ai/article-source';
+import { detectTeamsInTitle } from '@/lib/football/team-aliases';
+import { sameTeam } from '@/lib/football/team-name';
+import { classifyArticleTopic } from '@/lib/ai/article-cover';
+import { fetchTopicCoverImages } from '@/lib/ai/article-cover-fetch';
 
 const MODEL_ID = process.env.ARTICLE_MODEL_ID ?? 'gemini-flash-lite-latest';
 
@@ -23,11 +28,26 @@ export function todayInBangkok(): string {
 //      ผลคือบางวันได้ PL บางวันได้ลาลีกา แล้วแต่ดวง ไม่มีอะไรฟ้องว่าผิด
 //
 // unique (season_id, published_on) รองรับลีกละบทต่อวันอยู่แล้ว จึงไม่ต้องแก้ schema
+
+// ตัวหาโลโก้จากชื่อทีม — โหลดตาราง teams มาทั้งหมดครั้งเดียว (หลักสิบแถว) แล้วเทียบผ่าน sameTeam
+// เพราะชื่อที่ส่งเข้ามามีสองแบบปน: ชื่อจาก DB ("Manchester City FC") เมื่อหา fixture เจอ กับชื่อจาก
+// ตารางฉายา ("Manchester City") เมื่อเดาจากพาดหัว — เทียบตรงตัวติดแค่แบบแรก
+async function makeCrestLookup(
+  sql: postgres.Sql,
+): Promise<(team: string) => string | null> {
+  const rows = await sql<{ name: string; crest_url: string | null }[]>`
+    select name, crest_url from teams
+  `;
+  return (team) =>
+    rows.find((row) => sameTeam(row.name, team))?.crest_url ?? null;
+}
+
 export async function runGenerateArticle(
   sql: postgres.Sql,
   options: { force?: boolean; date?: string; onLog?: (msg: string) => void } = {},
 ) {
   const log = options.onLog ?? (() => {});
+  const crestFor = await makeCrestLookup(sql);
 
   const seasons = await sql<{ id: string; competition_code: string; name: string }[]>`
     select id, competition_code, name from seasons
@@ -72,13 +92,32 @@ export async function runGenerateArticle(
       log(`[${tag}] เรียก ${MODEL_ID} เขียนบทความ...`);
       const article = await generateArticle(MODEL_ID, source);
 
+      // หารูปหน้าปกหลังรู้พาดหัวแล้วเท่านั้น — ตอนสร้าง source ยังไม่มีอะไรบอกว่าบทความจะพูดเรื่องอะไร
+      // ถ้าเลือกรูปตั้งแต่ตอนนั้นก็ได้แต่รูปกลาง ๆ ของทั้งลีก ซ้ำกันทุกใบ (ดู lib/ai/article-cover.ts)
+      const topic = classifyArticleTopic(article.title, article.body);
+      const knownTeams = teamNamesFromSource(source);
+      const teams = detectTeamsInTitle(article.title, knownTeams);
+      const fixture = resolveFixture(teams, source, {
+        preferUpcoming: topic === 'preview',
+      });
+      const { urls: coverImageUrls, layer } = await fetchTopicCoverImages(
+        season.name,
+        topic,
+        article.title,
+        { knownTeams, teams, fixture, crestFor },
+      );
+      log(
+        `[${tag}] หัวข้อ: ${topic} · ภาพจากชั้น: ${layer}` +
+          (fixture ? ` (${fixture.homeTeam} vs ${fixture.awayTeam})` : ''),
+      );
+
       await sql`
         insert into articles (
           season_id, published_on, title, body, cover_image_urls, model_id, source_snapshot
         )
         values (
           ${season.id}, ${today}, ${article.title}, ${article.body},
-          ${source.coverImageUrls}, ${MODEL_ID}, ${JSON.stringify(source)}::jsonb
+          ${coverImageUrls}, ${MODEL_ID}, ${JSON.stringify(source)}::jsonb
         )
         on conflict (season_id, published_on) do update set
           title = excluded.title,

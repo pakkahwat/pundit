@@ -16,6 +16,8 @@ type Phase = "upcoming" | "live" | "awaiting" | "finished";
 function phaseOf(m: TodayMatch, secondsSince: number): Phase {
   if (m.status === "FINISHED" && m.homeScore != null) return "finished";
   if (secondsSince < 0) return "upcoming";
+  // m.live = SportMonks ยืนยันมาว่านัดนี้อยู่ใน inplay จริง เชื่อได้มากกว่าการเดาจากหน้าต่างเวลา
+  if (m.live) return "live";
   if (secondsSince < MATCH_WINDOW_MIN * 60) return "live";
   return "awaiting";
 }
@@ -52,6 +54,11 @@ export function LiveMatches({ matches }: { matches: TodayMatch[] }) {
 
   if (matches.length === 0) return null;
 
+  // สกอร์ที่เชื่อได้มีสองกรณีเท่านั้น: จบแล้ว (cron ดึงผลมาแล้ว) หรือมีสกอร์สดจาก SportMonks
+  // ระหว่างเตะที่ไม่มีสกอร์สด ตัวเลขใน DB ยังเป็นของก่อนเริ่มเกม โชว์ไปก็หลอกตาเปล่า ๆ
+  const showScoreFor = (m: TodayMatch, phase: Phase) =>
+    phase === "finished" || (phase === "live" && m.live);
+
   const liveCount = matches.filter((match) => {
     const secondsSince = match.secondsSinceKickoff + offsetSec;
     return phaseOf(match, secondsSince) === "live";
@@ -61,6 +68,10 @@ export function LiveMatches({ matches }: { matches: TodayMatch[] }) {
     const bLive = phaseOf(b, b.secondsSinceKickoff + offsetSec) === "live";
     return Number(bLive) - Number(aLive);
   });
+
+  // มีนัดกำลังเตะอยู่ แต่ไม่มีสกอร์สดให้เลยสักนัด = ตกไป fallback ของ football-data.org
+  // เฉพาะตอนนั้นถึงค่อยขึ้นคำอธิบาย ไม่งั้นจะไปเถียงกับสกอร์สดที่โชว์อยู่ข้าง ๆ เอง
+  const needsDelayNotice = liveCount > 0 && !matches.some((m) => m.live);
 
   return (
     <>
@@ -95,8 +106,7 @@ export function LiveMatches({ matches }: { matches: TodayMatch[] }) {
                       : m.competitionCode === "PD"
                         ? "ลาลีกา"
                         : m.competitionCode}
-                    {" · "}
-                    แมตช์เดย์ {m.matchday}
+                    {m.matchday > 0 && ` · แมตช์เดย์ ${m.matchday}`}
                   </span>
 
                   {phase === "live" && (
@@ -123,7 +133,7 @@ export function LiveMatches({ matches }: { matches: TodayMatch[] }) {
                     name={m.homeTeam}
                     crest={m.homeCrest}
                     score={m.homeScore}
-                    showScore={phase === "live" || phase === "finished"}
+                    showScore={showScoreFor(m, phase)}
                     won={
                       phase === "finished" &&
                       (m.homeScore ?? 0) > (m.awayScore ?? 0)
@@ -133,7 +143,7 @@ export function LiveMatches({ matches }: { matches: TodayMatch[] }) {
                     name={m.awayTeam}
                     crest={m.awayCrest}
                     score={m.awayScore}
-                    showScore={phase === "live" || phase === "finished"}
+                    showScore={showScoreFor(m, phase)}
                     won={
                       phase === "finished" &&
                       (m.awayScore ?? 0) > (m.homeScore ?? 0)
@@ -163,6 +173,7 @@ export function LiveMatches({ matches }: { matches: TodayMatch[] }) {
           );
         })}
       </ul>
+      {needsDelayNotice && <LiveNotice />}
     </>
   );
 }

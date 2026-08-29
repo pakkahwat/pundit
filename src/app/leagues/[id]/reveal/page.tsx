@@ -398,8 +398,13 @@ export default async function RevealPage({
                         return (
                           <li
                             key={member.userId}
-                            className="flex items-center gap-3 p-4"
+                            className="flex flex-col gap-2 p-4"
                           >
+                            {/* หัวแถวกับเหตุผลของ AI ต้องอยู่คนละบรรทัดกัน ไม่ใช่คนละคอลัมน์
+                              เดิมเหตุผลถูกวางไว้ในคอลัมน์ขวาของ flex แถวเดียวกัน พอบนมือถือที่กว้าง
+                              ~360px ข้อความยาว ๆ จะกินพื้นที่จนคอลัมน์ชื่อเหลือความกว้างระดับตัวอักษรเดียว
+                              แล้วชื่อไทยที่ไม่มีช่องว่างก็ถูกหักบรรทัดทีละตัวอักษรลงมาเป็นแถวยาว */}
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                             <PlayerAvatar
                               image={member.image}
                               name={member.name}
@@ -416,7 +421,7 @@ export default async function RevealPage({
                                       member.googleName,
                                     )
                               }
-                              className={`min-w-0 flex-1 break-words text-sm text-muted ${
+                              className={`min-w-[9rem] flex-1 break-words text-sm text-muted ${
                                 member.userId !== userId &&
                                 realNameHint(
                                   member.displayName,
@@ -438,38 +443,39 @@ export default async function RevealPage({
                             </span>
 
                             {!locked ? (
-                              <span className="shrink-0 text-sm text-muted">
+                              <span className="ml-auto shrink-0 text-sm text-muted">
                                 เปิดเผยหลังเริ่มแข่ง
                               </span>
                             ) : !pred ? (
-                              <span className="shrink-0 text-sm text-muted">
+                              <span className="ml-auto shrink-0 text-sm text-muted">
                                 ไม่ได้ทาย
                               </span>
                             ) : (
-                              <span className="flex min-w-0 flex-col items-end gap-1 text-right">
-                                <span
-                                  className={`text-sm ${
-                                    actualOutcome == null
-                                      ? "text-foreground"
-                                      : correct
-                                        ? "font-medium text-success"
-                                        : "text-muted line-through"
-                                  }`}
-                                >
-                                  {outcomeLabel(
-                                    pred.outcome,
-                                    m.homeTeamName,
-                                    m.awayTeamName,
-                                  )}
-                                </span>
-                                {member.playerKind === "ai" &&
-                                  pred.reasoning && (
-                                    <span className="max-w-md text-xs leading-relaxed text-muted">
-                                      {pred.reasoning}
-                                    </span>
-                                  )}
+                              <span
+                                className={`ml-auto shrink-0 text-right text-sm ${
+                                  actualOutcome == null
+                                    ? "text-foreground"
+                                    : correct
+                                      ? "font-medium text-success"
+                                      : "text-muted line-through"
+                                }`}
+                              >
+                                {outcomeLabel(
+                                  pred.outcome,
+                                  m.homeTeamName,
+                                  m.awayTeamName,
+                                )}
                               </span>
                             )}
+                            </div>
+
+                            {locked &&
+                              pred?.reasoning &&
+                              member.playerKind === "ai" && (
+                                <p className="border-l-2 border-border pl-3 text-xs leading-relaxed text-muted">
+                                  {pred.reasoning}
+                                </p>
+                              )}
                           </li>
                         );
                       })}

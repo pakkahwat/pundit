@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start -p 3001",
     "lint": "eslint",
+    "test": "tsx --test src/lib/ai/article.test.ts src/lib/ai/article-cover.test.ts src/lib/ai/prediction-log.test.ts src/lib/matches/live-overlay.test.ts src/lib/football/team-aliases.test.ts",
     "db:apply-schema": "tsx scripts/apply-schema.ts",
     "db:sync-fixtures": "tsx scripts/sync-fixtures.ts",
     "db:sync-results": "tsx scripts/sync-results.ts",
@@ -16,9 +17,13 @@
     "db:migrate-display-name": "tsx scripts/migrate-display-name.ts",
     "db:reset-play": "tsx scripts/reset-play-data.ts",
     "db:generate-article": "tsx scripts/generate-article.ts",
+    "db:backfill-covers": "tsx scripts/backfill-article-covers.ts",
+    "db:delete-today-articles": "tsx scripts/delete-today-articles.ts",
+    "db:backfill-ai-reasoning": "tsx scripts/backfill-ai-reasoning.ts",
     "db:seed-ai-agents": "tsx scripts/seed-ai-agents.ts",
     "db:run-ai-predictions": "tsx scripts/run-ai-predictions.ts",
     "test:llm": "tsx scripts/test-llm.ts",
+    "test:stadium-images": "tsx scripts/test-stadium-images.ts",
     "db:join-ai-agents-to-leagues": "tsx scripts/join-ai-agents-to-leagues.ts",
     "db:reset": "tsx scripts/reset-schema.ts",
     "db:test": "tsx scripts/test-connection.ts",
@@ -30,7 +35,9 @@
     "db:test-llm": "tsx scripts/test-llm.ts",
     "db:list-models": "tsx scripts/list-models.ts",
     "db:remove-ai-agent": "tsx scripts/remove-ai-agent.ts",
-    "db:season-status": "tsx scripts/season-status.ts"
+    "db:season-status": "tsx scripts/season-status.ts",
+    "db:test-sportmonks": "tsx scripts/test-sportmonks.ts",
+    "db:test-simulate-finish": "tsx scripts/test-simulate-finish.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.50",

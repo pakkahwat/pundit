@@ -5,6 +5,10 @@ import { db } from "@/db/client";
 import { baselinePredict } from "@/lib/ai/baseline";
 import { buildMatchContext, type MatchContext } from "@/lib/ai/context";
 import { hasApiKey, llmPredict } from "@/lib/ai/llm";
+import {
+  formatBaselineLogPrompt,
+  formatLlmLogPrompt,
+} from "@/lib/ai/prediction-log";
 import { guardedUpsertPrediction } from "@/lib/predictions/guarded-upsert";
 import type { PredictionOutcome } from "@/lib/predictions/outcome";
 import { getCurrentMatchdays } from "@/lib/matches/current-matchday";
@@ -31,7 +35,7 @@ async function predictFor(agent: AgentRow, context: MatchContext) {
     const { outcome, reasoning } = baselinePredict(context);
     return {
       outcome,
-      prompt: `baseline (deterministic ไม่มี LLM) -> ${outcome}: ${reasoning}`,
+      prompt: formatBaselineLogPrompt({ outcome, reasoning }),
       reasoning,
       latencyMs: null as number | null,
     };
@@ -51,7 +55,11 @@ async function predictFor(agent: AgentRow, context: MatchContext) {
     );
     return {
       outcome: result.outcome as PredictionOutcome,
-      prompt: `${result.prompt}\n\n--- โมเดลตอบ ---\n${result.outcome}: ${result.reasoning}`,
+      prompt: formatLlmLogPrompt({
+        prompt: result.prompt,
+        outcome: result.outcome,
+        reasoning: result.reasoning,
+      }),
       reasoning: result.reasoning,
       latencyMs: result.latencyMs as number | null,
     };

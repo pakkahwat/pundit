@@ -1,9 +1,12 @@
-process.env.DATABASE_URL ??= "postgres://user:pass@localhost:5432/postgres";
-
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildStorySeeds, parseRssItems, type ArticleSource } from "./article";
+import {
+  buildStorySeeds,
+  parseRssItems,
+  resolveFixture,
+  type ArticleSource,
+} from "./article-source";
 
 const sampleSource: ArticleSource = {
   date: "2026-08-27",
@@ -132,5 +135,32 @@ test("parseRssItems extracts encoded Google News thumbnail images", () => {
   assert.equal(
     item?.imageUrl,
     "https://lh3.googleusercontent.com/football-image",
+  );
+});
+
+test("resolveFixture: รู้เจ้าบ้านจริงจาก DB แม้พาดหัวเอาผู้ชนะขึ้นก่อน", () => {
+  // พาดหัว "ลิเวอร์พูลบุกถล่มอาร์เซนอล" เอ่ยลิเวอร์พูลก่อน แต่เกมจริงอาร์เซนอลเป็นเจ้าบ้าน
+  const fixture = resolveFixture(["Liverpool", "Arsenal"], sampleSource);
+  assert.deepEqual(fixture, { homeTeam: "Arsenal", awayTeam: "Liverpool" });
+});
+
+test("resolveFixture: ทีมเดียวก็หาแมตช์ของทีมนั้นเจอ และ preview เลือกเกมข้างหน้าก่อน", () => {
+  assert.deepEqual(resolveFixture(["Chelsea"], sampleSource), {
+    homeTeam: "Chelsea",
+    awayTeam: "Tottenham",
+  });
+  // Arsenal มีทั้งเกมที่จบแล้ว (พบ Liverpool) และเกมข้างหน้า (พบ Chelsea)
+  assert.deepEqual(
+    resolveFixture(["Arsenal"], sampleSource, { preferUpcoming: true }),
+    { homeTeam: "Arsenal", awayTeam: "Chelsea" },
+  );
+});
+
+test("resolveFixture: หาไม่เจอหรือไม่มีทีมให้หา คืน null เฉย ๆ", () => {
+  assert.equal(resolveFixture([], sampleSource), null);
+  assert.equal(resolveFixture(["Real Madrid"], sampleSource), null);
+  assert.equal(
+    resolveFixture(["Arsenal"], { recentResults: [], upcomingMatches: [] }),
+    null,
   );
 });

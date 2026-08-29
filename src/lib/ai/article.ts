@@ -2,7 +2,22 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { generateObject } from "ai";
 import type postgres from "postgres";
 import { z } from "zod";
+import {
+  DEFAULT_ARTICLE_COVER_IMAGES,
+  buildStorySeeds,
+  parseRssItems,
+  rotateSeedOrder,
+  type ArticleSource,
+} from "./article-source";
 import { getCurrentMatchday } from "@/lib/matches/current-matchday";
+
+// re-export ให้ผู้เรียกเดิมยังใช้เส้นทาง @/lib/ai/article ได้เหมือนเดิม
+export {
+  DEFAULT_ARTICLE_COVER_IMAGES,
+  buildStorySeeds,
+  parseRssItems,
+} from "./article-source";
+export type { ArticleSource, StorySeed } from "./article-source";
 
 // บทความรายวันที่ AI เขียน — หลักการสำคัญ: ให้โมเดลเขียนจาก "ข้อมูลที่เราส่งให้เท่านั้น" ซึ่งดึงมา
 // จาก DB ของเราเองล้วน ๆ ไม่ใช่ให้มันนึกข่าวจากความจำ เพราะความจำของโมเดลมีวันหมดอายุและแต่งเรื่อง
@@ -51,114 +66,6 @@ const SYSTEM_PROMPT = `คุณเป็นนักเขียนคอลั
 น้ำเสียง: เป็นกันเอง สนุก มีอารมณ์ขันบ้าง แบบคอลัมนิสต์ฟุตบอลคุยกับเพื่อน ไม่ใช่รายงานข่าวแห้ง ๆ
 ถ้ามีประเด็นที่ AI ทายพลาดหรือทายแม่นกว่าคน ให้หยิบมาเล่นเป็นสีสันได้ เพราะนั่นคือจุดขายของเว็บนี้`;
 
-export const DEFAULT_ARTICLE_COVER_IMAGES = [
-  "https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=1200&q=80",
-  "https://images.unsplash.com/photo-1518091043644-c1d4457512c6?auto=format&fit=crop&w=1200&q=80",
-  "https://images.unsplash.com/photo-1552318965-6e6be7484ad6?auto=format&fit=crop&w=1200&q=80",
-  "https://images.unsplash.com/photo-1560272564-c83b66b1ad12?auto=format&fit=crop&w=1200&q=80",
-];
-
-export type ArticleSource = {
-  date: string;
-  seasonName: string;
-  currentMatchday: number | null;
-  recentResults: {
-    homeTeam: string;
-    awayTeam: string;
-    homeScore: number | null;
-    awayScore: number | null;
-    kickoffAt: string;
-  }[];
-  upcomingMatches: { homeTeam: string; awayTeam: string; kickoffAt: string }[];
-  standings: {
-    rank: number;
-    team: string;
-    played: number;
-    points: number;
-    goalDiff: number;
-  }[];
-  predictorAccuracy: {
-    name: string | null;
-    isAi: boolean;
-    scored: number;
-    correct: number;
-  }[];
-  externalNews: {
-    title: string;
-    url?: string;
-    source?: string;
-    imageUrl?: string;
-  }[];
-  // ภาพหน้าปกแบบฟุตบอลจริง ไม่ใช่โลโก้ทีม เพื่อให้บรรยากาศข่าวดูเป็นสื่อฟุตบอลมากกว่าแบรนด์ทีม
-  coverImageUrls: string[];
-};
-
-export type StorySeed = {
-  label: string;
-  evidence: string[];
-};
-
-function decodeRssHtml(value: string): string {
-  return value
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/&amp;/g, "&");
-}
-
-export function parseRssItems(
-  xml: string,
-): { title: string; url?: string; source?: string; imageUrl?: string }[] {
-  const items = [...xml.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)];
-
-  return items
-    .map((match) => {
-      const itemXml = match[1];
-      const titleMatch = itemXml.match(
-        /<title(?:\s[^>]*)?>([\s\S]*?)<\/title>/i,
-      );
-      const linkMatch = itemXml.match(/<link(?:\s[^>]*)?>([\s\S]*?)<\/link>/i);
-      const sourceMatch = itemXml.match(
-        /<source(?:\s[^>]*)?>([\s\S]*?)<\/source>/i,
-      );
-      const title = (titleMatch?.[1] ?? "")
-        .replace(/<!\[CDATA\[|\]\]>/g, "")
-        .replace(/<[^>]+>/g, "")
-        .trim();
-      const url = (linkMatch?.[1] ?? "")
-        .replace(/<!\[CDATA\[|\]\]>/g, "")
-        .replace(/<[^>]+>/g, "")
-        .trim();
-      const source = (sourceMatch?.[1] ?? "")
-        .replace(/<!\[CDATA\[|\]\]>/g, "")
-        .replace(/<[^>]+>/g, "")
-        .trim();
-      const descriptionMatch = itemXml.match(
-        /<description(?:\s[^>]*)?>([\s\S]*?)<\/description>/i,
-      );
-      const decodedDescription = decodeRssHtml(descriptionMatch?.[1] ?? "");
-      const imageUrl =
-        itemXml.match(/<media:content[^>]+url=["']([^"']+)["']/i)?.[1] ??
-        itemXml.match(/<enclosure[^>]+url=["']([^"']+)["']/i)?.[1] ??
-        itemXml.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] ??
-        decodedDescription.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1];
-      const normalizedImageUrl = imageUrl?.startsWith("//")
-        ? `https:${imageUrl}`
-        : imageUrl;
-
-      return title
-        ? {
-            title,
-            url: url || undefined,
-            source: source || undefined,
-            imageUrl: normalizedImageUrl || undefined,
-          }
-        : undefined;
-    })
-    .filter((item): item is NonNullable<typeof item> => item !== undefined)
-    .slice(0, 5);
-}
 
 async function fetchExternalNews(
   seasonName: string,
@@ -193,98 +100,6 @@ async function fetchExternalNews(
   return [];
 }
 
-export function buildStorySeeds(src: ArticleSource): StorySeed[] {
-  const topTable = src.standings.slice(0, 4);
-  const highestScoring = [...src.recentResults]
-    .filter((r) => r.homeScore !== null && r.awayScore !== null)
-    .sort((a, b) => {
-      const totalA = (a.homeScore ?? 0) + (a.awayScore ?? 0);
-      const totalB = (b.homeScore ?? 0) + (b.awayScore ?? 0);
-      return totalB - totalA;
-    })
-    .slice(0, 2);
-  const upcoming = src.upcomingMatches.slice(0, 3);
-  const predictors = src.predictorAccuracy.slice(0, 3);
-  const external = src.externalNews.slice(0, 2);
-
-  const seeds: StorySeed[] = [
-    {
-      label: "จุดเดือดบนตารางคะแนน",
-      evidence:
-        topTable.length > 0
-          ? topTable.map(
-              (team) =>
-                `${team.rank}. ${team.team} — ${team.points} แต้ม จาก ${team.played} นัด, ผลต่างประตู ${team.goalDiff}`,
-            )
-          : ["ยังไม่มีข้อมูลตารางคะแนนเพียงพอ"],
-    },
-    {
-      label: "ผลการแข่งขันล่าสุดที่สร้างความเคลื่อนไหว",
-      evidence:
-        src.recentResults.length > 0
-          ? src.recentResults
-              .slice(0, 3)
-              .map(
-                (match) =>
-                  `${match.homeTeam} ${match.homeScore ?? 0}-${match.awayScore ?? 0} ${match.awayTeam}`,
-              )
-          : ["ยังไม่มีนัดที่จบแล้วในช่วงนี้"],
-    },
-    {
-      label: "นัดสำคัญที่กำลังรออยู่",
-      evidence:
-        upcoming.length > 0
-          ? upcoming.map((match) => `${match.homeTeam} พบ ${match.awayTeam}`)
-          : ["ยังไม่มีโปรแกรมนัดถัดไป"],
-    },
-    {
-      label: "การแข่งขันของคนทายผลกับ AI",
-      evidence:
-        predictors.length > 0
-          ? predictors.map(
-              (person) =>
-                `${person.name ?? "ผู้ทายไร้ชื่อ"} ${person.isAi ? "(AI)" : "(คนจริง)"} ทายถูก ${person.correct} จาก ${person.scored} นัด`,
-            )
-          : ["ยังไม่มีข้อมูลความแม่นยำ"],
-    },
-    {
-      label: "เกมที่มีโอกาสเปลี่ยนภาพตาราง",
-      evidence:
-        highestScoring.length > 0
-          ? highestScoring.map(
-              (match) =>
-                `${match.homeTeam} ${match.homeScore ?? 0}-${match.awayScore ?? 0} ${match.awayTeam} — ผลรวม ${(match.homeScore ?? 0) + (match.awayScore ?? 0)} ประตู`,
-            )
-          : ["ยังไม่มีนัดที่มีสกอร์สูงพอจะนำมาเล่า"],
-    },
-    {
-      label: "ข่าวฟุตบอลรอบวันที่เกี่ยวกับลีก",
-      evidence:
-        external.length > 0
-          ? external.map((item) => item.title)
-          : ["ยังไม่มีข่าวฟุตบอลภายนอกที่เกี่ยวข้องกับลีกในวันนี้"],
-    },
-  ];
-
-  if (
-    src.recentResults.length === 0 &&
-    src.upcomingMatches.length === 0 &&
-    external.length > 0
-  ) {
-    return [seeds[5], seeds[0], seeds[3], seeds[1], seeds[2], seeds[4]];
-  }
-
-  return seeds;
-}
-
-function rotateSeedOrder<T>(items: T[], key: string): T[] {
-  const offset =
-    Array.from(key).reduce((sum, ch) => sum + ch.charCodeAt(0), 0) %
-    items.length;
-  if (items.length <= 1) return items;
-  return [...items.slice(offset), ...items.slice(0, offset)];
-}
-
 // รวบรวมข้อมูลดิบสำหรับเขียนบทความ — ทุก query อิงจากข้อมูลที่เกิดขึ้นจริงใน DB แล้วเท่านั้น
 export async function buildArticleSource(
   sql: postgres.Sql,
@@ -297,7 +112,7 @@ export async function buildArticleSource(
   // ใช้กติกาเดียวกับที่หน้าเว็บใช้ ไม่งั้นบทความจะเขียนเลขแมตช์เดย์ไม่ตรงกับที่ผู้อ่านเห็นบนเว็บ
   const currentMatchday = await getCurrentMatchday(seasonId, sql);
 
-  const [recentResults, upcomingMatches, standings, accuracy, crests] =
+  const [recentResults, upcomingMatches, standings, accuracy] =
     await Promise.all([
       sql<
         {
@@ -350,6 +165,9 @@ export async function buildArticleSource(
     `,
       // ความแม่นของผู้ทายแต่ละคน — ใจกลางของคำถามวิจัย เอาไปให้ AI เล่าเป็นสีสันในบทความได้
       // นับจาก prediction_scores ซึ่งมีเฉพาะแมตช์ที่จบแล้วเท่านั้น จึงไม่มีทางรั่วคำทายที่ยังไม่ล็อก
+      //
+      // ต้อง join matches แล้วกรอง season_id ด้วย เพราะบทความเขียนแยกรายลีก ถ้านับรวมทุกลีก
+      // คอลัมน์ของลาลีกาจะอ้างตัวเลขที่มีคำทายพรีเมียร์ลีกปนอยู่ ซึ่งผู้อ่านตรวจย้อนกลับไม่ได้เลย
       sql<
         {
           name: string | null;
@@ -363,29 +181,11 @@ export async function buildArticleSource(
         count(*) filter (where ps.points_awarded > 0)::int as correct
       from prediction_scores ps
       join predictions p on p.id = ps.prediction_id
+      join matches m on m.id = p.match_id and m.season_id = ${seasonId}
       join users u on u.id = p.user_id
       group by u.id, u.name, u.display_name, u.player_kind
       order by correct desc
       limit 12
-    `,
-      // เก็บโลโก้ทีมไว้เพื่อมองย้อนกลับใน source snapshot เท่านั้น
-      // แต่ภาพหน้าปกของบทความจะถูกแทนด้วยภาพฟุตบอลจริงทุกครั้ง เพื่อหลีกเลี่ยงการแสดงโลโก้ทีมบนข่าว
-      sql<{ crest_url: string | null }[]>`
-      with involved as (
-        select m.home_team_id as team_id, m.kickoff_at,
-          case when m.status = 'FINISHED' then 0 else 1 end as priority
-        from matches m where m.season_id = ${seasonId}
-        union all
-        select m.away_team_id, m.kickoff_at,
-          case when m.status = 'FINISHED' then 0 else 1 end
-        from matches m where m.season_id = ${seasonId}
-      )
-      select distinct on (t.id) t.crest_url
-      from involved i
-      join teams t on t.id = i.team_id
-      where t.crest_url is not null
-      order by t.id, i.priority, i.kickoff_at desc
-      limit 3
     `,
     ]);
 

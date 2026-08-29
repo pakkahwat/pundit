@@ -19,6 +19,10 @@ async function main() {
     throw new Error("Missing DATABASE_URL in .env.local");
   }
 
+  // ลบถาวร แก้กลับไม่ได้ (ต้องให้ AI เขียนใหม่ทั้งหมด) จึงบังคับยืนยันเหมือน db:reset-play
+  // รัน: npm run db:delete-today-articles -- --yes   (ไม่ใส่ = แสดงรายการเฉย ๆ ไม่ลบ)
+  const confirmed = process.argv.includes("--yes");
+
   const sql = postgres(connectionString, { prepare: false });
   const today = todayInBangkok();
 
@@ -35,6 +39,13 @@ async function main() {
     console.log(`บทความวันที่ ${today} ก่อนลบ: ${rows.length}`);
     for (const row of rows) {
       console.log(`- [${row.season_name}] ${row.title}`);
+    }
+
+    if (!confirmed) {
+      console.log(
+        "ยังไม่ได้ลบอะไรเลย — ยืนยันด้วย: npm run db:delete-today-articles -- --yes",
+      );
+      return;
     }
 
     const deleted = await sql<{ id: string }[]>`

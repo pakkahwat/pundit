@@ -6,7 +6,7 @@ import { ArticleBody } from "@/components/article-body";
 import { ArticleCard } from "@/components/article-card";
 import { Hero } from "@/components/hero";
 import { Landing } from "@/components/landing";
-import { LiveMatches, LiveNotice } from "@/components/live-matches";
+import { LiveMatches } from "@/components/live-matches";
 import {
   Badge,
   Card,
@@ -238,7 +238,6 @@ export default async function Home(props: PageProps<"/">) {
           <section>
             <SectionLabel>บอลวันนี้ · พรีเมียร์ลีก</SectionLabel>
             <LiveMatches matches={todayMatches} />
-            <LiveNotice />
           </section>
         )}
 
