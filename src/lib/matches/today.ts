@@ -4,7 +4,10 @@ import { db } from "@/db/client";
 import { withUserContext } from "@/db/rls";
 import { predictions } from "@/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
-import { getSportMonksPremierLeagueLive } from "@/lib/football/sportmonks";
+import {
+  getSportMonksPremierLeagueLive,
+  type SportMonksLiveEvent,
+} from "@/lib/football/sportmonks";
 import { overlayLiveScores } from "@/lib/matches/live-overlay";
 
 // ── "บอลวันนี้" สำหรับหน้าแรก ─────────────────────────────────────────────────
@@ -47,6 +50,10 @@ export type TodayMatch = {
   predicted: boolean | null;
   /** true = สกอร์ในแถวนี้เป็นสกอร์สดจริงจาก SportMonks ไม่ใช่ค่าหน่วงเวลาใน DB */
   live: boolean;
+  /** นาทีจริงในเกมจากนาฬิกากรรมการ — มีเฉพาะตอน live, null ตอนพักครึ่ง */
+  minute?: number | null;
+  /** ประตู/ใบแดงระหว่างเกม — มีเฉพาะตอน live */
+  events?: SportMonksLiveEvent[];
 };
 
 export async function getTodayMatches(userId: string): Promise<TodayMatch[]> {

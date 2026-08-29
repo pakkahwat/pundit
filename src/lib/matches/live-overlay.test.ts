@@ -17,6 +17,8 @@ const liveFixture = (over: Partial<SportMonksLiveMatch> = {}) => ({
   awayTeam: "Crystal Palace",
   homeScore: 2,
   awayScore: 1,
+  minute: 67,
+  events: [],
   ...over,
 });
 

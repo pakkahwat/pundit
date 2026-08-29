@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { TeamCrest } from "./team-crest";
 import { Badge, Card } from "./ui";
+import type { SportMonksLiveEvent } from "@/lib/football/sportmonks";
 import type { TodayMatch } from "@/lib/matches/today";
 
 // นัดหนึ่งใช้เวลาจริงราว 105 นาที (45+45 พักครึ่ง 15) บวกทดเจ็บอีกหน่อย เผื่อไว้ 150 นาที
@@ -151,12 +152,17 @@ export function LiveMatches({ matches }: { matches: TodayMatch[] }) {
                   />
                 </div>
 
+                {(m.events?.length ?? 0) > 0 && (
+                  <MatchEvents events={m.events!} />
+                )}
+
                 <div className="mt-auto flex items-center justify-between gap-2 border-t border-border pt-2.5">
                   <span className="text-xs text-muted">
                     {phase === "upcoming" && formatCountdown(-secondsSince)}
-                    {/* จงใจเขียนว่า "เริ่มไปแล้ว X นาที" ไม่ใช่ "นาทีที่ X" เพราะนี่คือเวลาจริงที่
-                      ผ่านไปตั้งแต่คิกออฟ ซึ่งรวมพักครึ่งกับเวลาทดเจ็บอยู่ด้วย ไม่ใช่นาทีในเกม */}
-                    {phase === "live" && `เริ่มไปแล้ว ${elapsedMin} นาที`}
+                    {/* มีข้อมูลสด = ใช้นาทีจริงจากนาฬิกากรรมการ (รู้จักพักครึ่งและทดเวลา)
+                      ไม่มีก็ตกไปนับเวลาจริงจากคิกออฟ ซึ่งจงใจเขียนว่า "เริ่มไปแล้ว" ไม่ใช่ "นาทีที่"
+                      เพราะเลขนั้นรวมพักครึ่งอยู่ด้วย ไม่ใช่นาทีในเกม */}
+                    {phase === "live" && liveClockLabel(m, elapsedMin)}
                     {phase === "awaiting" && "รอระบบดึงผล"}
                     {phase === "finished" && formatKickoffTime(m.kickoffAt)}
                   </span>
@@ -175,6 +181,53 @@ export function LiveMatches({ matches }: { matches: TodayMatch[] }) {
       </ul>
       {needsDelayNotice && <LiveNotice />}
     </>
+  );
+}
+
+// สถานะจาก SportMonks ที่แปลว่า "พักอยู่ ไม่ใช่กำลังเตะ" — ตอนนี้นาฬิกาไม่เดิน minute จึงเป็น null
+const BREAK_STATUSES = new Set(["HT", "BREAK", "ET_BREAK", "PEN_BREAK"]);
+
+function liveClockLabel(m: TodayMatch, elapsedMin: number): string {
+  if (m.live && BREAK_STATUSES.has(m.status)) return "พักครึ่ง";
+  if (m.live && m.minute != null) return `นาทีที่ ${m.minute}'`;
+  return `เริ่มไปแล้ว ${elapsedMin} นาที`;
+}
+
+const EVENT_ICONS: Record<SportMonksLiveEvent["kind"], string> = {
+  goal: "⚽",
+  penalty: "⚽",
+  owngoal: "⚽",
+  redcard: "🟥",
+};
+
+function eventLabel(event: SportMonksLiveEvent): string {
+  const minute =
+    event.minute != null
+      ? `${event.minute}${event.extraMinute ? `+${event.extraMinute}` : ""}'`
+      : "";
+  const suffix =
+    event.kind === "owngoal"
+      ? " (เข้าประตูตัวเอง)"
+      : event.kind === "penalty"
+        ? " (จุดโทษ)"
+        : "";
+  return `${minute} ${event.playerName ?? ""}${suffix}`.trim();
+}
+
+// ประตูและใบแดงระหว่างเกม — จัดชิดซ้าย/ขวาตามฝั่งทีมเหมือนสกอร์บอร์ดถ่ายทอดสด
+function MatchEvents({ events }: { events: SportMonksLiveEvent[] }) {
+  return (
+    <ul className="flex flex-col gap-0.5 text-xs text-muted">
+      {events.map((event, index) => (
+        <li
+          key={index}
+          className={`flex items-center gap-1 ${event.side === "away" ? "flex-row-reverse text-right" : ""}`}
+        >
+          <span aria-hidden>{EVENT_ICONS[event.kind]}</span>
+          <span className="min-w-0 truncate">{eventLabel(event)}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

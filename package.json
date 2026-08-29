@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start -p 3001",
     "lint": "eslint",
-    "test": "tsx --test src/lib/ai/article.test.ts src/lib/ai/article-cover.test.ts src/lib/ai/prediction-log.test.ts src/lib/matches/live-overlay.test.ts src/lib/football/team-aliases.test.ts",
+    "test": "tsx --test src/lib/ai/article.test.ts src/lib/ai/article-cover.test.ts src/lib/ai/prediction-log.test.ts src/lib/matches/live-overlay.test.ts src/lib/football/team-aliases.test.ts src/lib/football/sportmonks.test.ts",
     "db:apply-schema": "tsx scripts/apply-schema.ts",
     "db:sync-fixtures": "tsx scripts/sync-fixtures.ts",
     "db:sync-results": "tsx scripts/sync-results.ts",

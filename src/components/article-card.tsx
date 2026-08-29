@@ -135,6 +135,19 @@ function CoverArt({
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const imageSource = failedUrl === imageUrl ? fallbackPool[0] : imageUrl;
 
+  // ช่องโหว่ของ onError กับ SSR: ถ้ารูปโหลดพังไปแล้ว *ก่อน* React hydrate เสร็จ (หน้านี้เรนเดอร์
+  // จาก server, เบราว์เซอร์เริ่มโหลดรูปทันทีที่เห็น HTML) event error จะยิงไปแล้วตอนที่ handler
+  // ยังไม่ถูกผูก และมันไม่ยิงซ้ำ — การ์ดเลยค้างเป็นไอคอนรูปแตกโดย fallback ไม่เคยทำงาน
+  // (อาการจริงที่เจอ: การ์ดมืดทั้งแถวทั้งที่โค้ด fallback อยู่ครบ) จึงต้องเช็คย้อนหลังตอน mount:
+  // รูปที่ "โหลดจบแล้ว" (complete) แต่ไม่มีขนาด (naturalWidth 0) คือรูปที่พังไปก่อนหน้านี้
+  const imgRef = useRef<HTMLImageElement | null>(null);
+  useEffect(() => {
+    const img = imgRef.current;
+    if (img && img.complete && img.naturalWidth === 0) {
+      setFailedUrl(imageUrl);
+    }
+  }, [imageUrl]);
+
   // แบนเนอร์โลโก้ "เหย้า vs เยือน" — ใช้กับบทความแมตช์ที่หาทั้งภาพข่าวและภาพสนามไม่ได้
   // (ดูคำอธิบาย scheme vs:// ใน lib/ai/article-cover.ts) เรนเดอร์เป็น component ตรงนี้เลย
   // เพราะภาพจริงที่ฝังโลโก้ external ไว้ข้างในโหลดไม่ขึ้นเมื่ออยู่ใน <img>
@@ -172,6 +185,7 @@ function CoverArt({
         ก็เท่ากับยกเว็บเราให้เป็น image proxy ฟรีของอินเทอร์เน็ต (ดูคอมเมนต์ใน next.config.ts) */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
+        ref={imgRef}
         src={imageSource}
         alt=""
         className={`absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] ${playerStory ? "object-center" : "object-[center_35%]"}`}

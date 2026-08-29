@@ -103,10 +103,16 @@ type WikiSummary = {
  * ภาพสนามเหย้าของทีม จากรูปหลักของหน้า Wikipedia ของสนามนั้น
  *
  * ใช้ REST summary endpoint เพราะให้รูปหลักของหน้ามาเลยใน call เดียว ไม่ต้อง parse HTML
- * รูป thumbnail ที่ได้กว้างแค่ ~320px ซึ่งเล็กไปสำหรับ banner — URL รูปย่อของ Wikimedia
- * ฝังความกว้างไว้ในชื่อ ("/320px-...") ขยับเป็น 1200px ได้โดยแก้สตริงตรง ๆ เซิร์ฟเวอร์เขา
- * ย่อ-ขยายให้ตามชื่อไฟล์ที่ขอ (ทางการกว่าใช้ originalimage ซึ่งบางสนามใหญ่หลาย MB)
+ *
+ * สองกับดักที่เจอมาแล้วจริง (ทดสอบใน browser กับ upload.wikimedia.org ตรง ๆ):
+ * 1. thumbnail.source มี query string "?utm_source=..." ต่อท้าย ต้องตัดทิ้งก่อนแก้ขนาด
+ * 2. เซิร์ฟเวอร์รูปย่อของ Wikimedia รับเฉพาะความกว้างบางค่าเท่านั้น — 500/960/1280 ผ่าน
+ *    แต่ 640/800/1024/1200 โดนปฏิเสธหมด เวอร์ชันแรกขอ 1200px จึงพังทุกรูปทั้งที่หน้า
+ *    Wikipedia มีรูปครบ จึงขอ 1280px และ **ตรวจ HEAD ก่อนคืนเสมอ** — เว็บเขาเปลี่ยน
+ *    นโยบายแบบนี้ได้อีก อย่าคืน URL ที่ไม่เคยพิสูจน์ว่าโหลดได้จริง
  */
+const WIKIMEDIA_THUMB_WIDTH = 1280;
+
 export async function fetchStadiumImage(team: string): Promise<string | null> {
   const page = stadiumPageFor(team);
   if (!page) return null;
@@ -120,9 +126,20 @@ export async function fetchStadiumImage(team: string): Promise<string | null> {
     if (!response.ok) return null;
 
     const summary = (await response.json()) as WikiSummary;
-    const thumb = summary.thumbnail?.source;
-    if (thumb) return thumb.replace(/\/\d+px-/, "/1200px-");
-    return summary.originalimage?.source ?? null;
+    const thumb = summary.thumbnail?.source?.split("?")[0];
+
+    // ไล่จากใหญ่ไปเล็ก: รูปย่อ 1280px → รูปต้นฉบับ → รูปย่อเล็กที่ API ให้มา (~320px ก็ยัง
+    // ดีกว่าไม่มี) — ตัวแรกที่ HEAD ผ่านชนะ
+    const candidates = [
+      thumb?.replace(/\/\d+px-/, `/${WIKIMEDIA_THUMB_WIDTH}px-`),
+      summary.originalimage?.source?.split("?")[0],
+      thumb,
+    ].filter((candidate): candidate is string => Boolean(candidate));
+
+    for (const candidate of [...new Set(candidates)]) {
+      if (await isUsableImageUrl(candidate)) return candidate;
+    }
+    return null;
   } catch {
     return null;
   }

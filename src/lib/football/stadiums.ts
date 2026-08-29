@@ -18,7 +18,8 @@ const STADIUM_PAGES: Record<string, string> = {
   Brentford: "Brentford Community Stadium",
   "Brighton & Hove Albion": "Falmer Stadium",
   Burnley: "Turf Moor",
-  Chelsea: "Stamford Bridge",
+  // ต้องมีวงเล็บกำกับ — "Stamford Bridge" เฉย ๆ คือหมู่บ้านในยอร์กเชียร์ (และสมรภูมิปี 1066)
+  Chelsea: "Stamford Bridge (stadium)",
   "Crystal Palace": "Selhurst Park",
   Everton: "Everton Stadium",
   Fulham: "Craven Cottage",
@@ -46,7 +47,8 @@ const STADIUM_PAGES: Record<string, string> = {
   "Celta Vigo": "Balaídos",
   Getafe: "Coliseum Alfonso Pérez",
   Osasuna: "El Sadar Stadium",
-  "Rayo Vallecano": "Campo de Fútbol de Vallecas",
+  // หน้านี้ยังไม่มีรูปประกอบ (ตรวจ 29 ส.ค. 2026) — ราโยจะตกไปใช้แบนเนอร์โลโก้จนกว่าจะมีคนอัปโหลด
+  "Rayo Vallecano": "Vallecas Stadium",
   Mallorca: "Estadi de Son Moix",
   Girona: "Estadi Montilivi",
   Alaves: "Mendizorrotza Stadium",

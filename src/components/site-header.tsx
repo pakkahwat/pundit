@@ -27,9 +27,9 @@ async function currentDisplayName(userId: string) {
 // เมนูหลักถูกแยกเป็นสองแถวบนจอแคบ (แถวบน = โลโก้ + บัญชี, แถวล่าง = เมนู) เพราะถ้ายัดทุกอย่าง
 // ไว้แถวเดียว ชื่อลิงก์จะถูกบีบจนอ่านไม่ออก
 //
-// จุดสลับเป็น md (768px) ไม่ใช่ sm (640px) เพราะวัดจริงแล้วแถวเดียว (โลโก้ + เมนู 5 อัน + ชื่อ +
-// ปุ่มออกจากระบบ) ต้องการราว 720px — ถ้าสลับที่ 640px ช่วง 640-719px จะดันหน้าเว็บล้นออกไป 80px
-// จนเลื่อนซ้ายขวาได้ทั้งหน้า ซึ่งเป็นความกว้างของแท็บเล็ตแนวตั้งและหน้าต่างเบราว์เซอร์แบบครึ่งจอ
+// จุดสลับขยับจาก md (768px) เป็น lg (1024px) ตอนเพิ่มเมนู "ผลบอลสด" เป็นอันที่ 7 —
+// เกณฑ์เดิมวัดไว้ว่าเมนู 5 อันต้องการราว 720px พอบวกอีกสองอัน (~160px) แถวเดียวต้องการ
+// เกิน 850px ซึ่งทะลุ md ไปแล้ว ถ้าฝืนไว้ที่ md ช่วง 768-880px จะล้นจนหน้าเลื่อนซ้ายขวาได้
 export async function SiteHeader() {
   const session = await auth();
   const signedIn = Boolean(session?.user?.id);
@@ -47,11 +47,12 @@ export async function SiteHeader() {
 
           {signedIn && (
             <nav
-              className="hidden items-center gap-1 md:flex"
+              className="hidden items-center gap-1 lg:flex"
               aria-label="เมนูหลัก"
             >
               <NavLink href="/">หน้าแรก</NavLink>
               <NavLink href="/leagues">ลีกของฉัน</NavLink>
+              <NavLink href="/live">ผลบอลสด</NavLink>
               <NavLink href="/vs-ai">คนปะทะ AI</NavLink>
               <NavLink href="/standings">ตารางคะแนน</NavLink>
               <NavLink href="/fixtures">โปรแกรมแข่ง</NavLink>
@@ -63,7 +64,7 @@ export async function SiteHeader() {
             <div className="flex shrink-0 items-center gap-2">
               <Link
                 href="/settings"
-                className="hidden rounded-lg px-2.5 py-1.5 text-sm text-muted transition-colors hover:bg-surface-hover hover:text-foreground md:inline"
+                className="hidden rounded-lg px-2.5 py-1.5 text-sm text-muted transition-colors hover:bg-surface-hover hover:text-foreground lg:inline"
               >
                 {await currentDisplayName(session.user.id)}
               </Link>
@@ -84,11 +85,12 @@ export async function SiteHeader() {
         {/* เมนูแถวที่สองสำหรับจอมือถือ — เลื่อนแนวนอนได้ถ้าเมนูยาวเกินจอ */}
         {signedIn && (
           <nav
-            className="-mx-4 flex items-center gap-1 overflow-x-auto px-4 pb-2 md:hidden"
+            className="-mx-4 flex items-center gap-1 overflow-x-auto px-4 pb-2 lg:hidden"
             aria-label="เมนูหลัก (มือถือ)"
           >
             <NavLink href="/">หน้าแรก</NavLink>
             <NavLink href="/leagues">ลีกของฉัน</NavLink>
+            <NavLink href="/live">ผลบอลสด</NavLink>
             <NavLink href="/vs-ai">คนปะทะ AI</NavLink>
             <NavLink href="/standings">ตารางคะแนน</NavLink>
             <NavLink href="/fixtures">โปรแกรมแข่ง</NavLink>

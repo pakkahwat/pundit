@@ -8,6 +8,15 @@ const SPORTMONKS_PREMIER_LEAGUE_ID = 8;
 // ตัวโปรแกรมแข่งเอง (id, คิกออฟ, แมตช์เดย์, โลโก้ทีม) ยังใช้ของ football-data.org ใน DB เราเหมือนเดิม
 // เพราะนั่นคือชุดข้อมูลที่ผูกกับคำทายและการคิดคะแนน ถ้าเอาแมตช์ของ SportMonks มาแสดงแทนทั้งดุ้น
 // id จะคนละชุดกันทันที เชื่อมกลับไปหาคำทายของผู้ใช้ไม่ได้เลย — ดู lib/matches/today.ts
+export type SportMonksLiveEvent = {
+  /** นาทีในเกมจากกรรมการ + ทดเวลา (เช่น 45+2 คือ minute 45, extraMinute 2) */
+  minute: number | null;
+  extraMinute: number | null;
+  playerName: string | null;
+  side: "home" | "away";
+  kind: "goal" | "owngoal" | "penalty" | "redcard";
+};
+
 export type SportMonksLiveMatch = {
   /** ISO 8601 ลงท้ายด้วย Z เสมอ (normalize แล้ว ดู toIsoUtc) */
   kickoffAt: string;
@@ -16,6 +25,9 @@ export type SportMonksLiveMatch = {
   awayTeam: string;
   homeScore: number | null;
   awayScore: number | null;
+  /** นาทีจริงในเกมจากนาฬิกากรรมการ (periods ของ SportMonks) — null ตอนพักครึ่ง/ไม่มีข้อมูล */
+  minute: number | null;
+  events: SportMonksLiveEvent[];
 };
 
 type SportMonksParticipant = {
@@ -29,12 +41,27 @@ type SportMonksScore = {
   score?: { goals?: number | null };
 };
 
+type SportMonksPeriod = {
+  ticking?: boolean;
+  minutes?: number | null;
+};
+
+type SportMonksEvent = {
+  participant_id?: number;
+  player_name?: string | null;
+  minute?: number | null;
+  extra_minute?: number | null;
+  type?: { developer_name?: string | null } | null;
+};
+
 type SportMonksFixture = {
   id?: number;
   starting_at?: string;
   state?: { short_name?: string; name?: string };
   participants?: SportMonksParticipant[];
   scores?: SportMonksScore[];
+  periods?: SportMonksPeriod[];
+  events?: SportMonksEvent[];
 };
 
 type SportMonksResponse = {
@@ -61,6 +88,52 @@ function participant(
   return participants.find((item) => item.meta?.location === location);
 }
 
+/**
+ * นาทีจริงในเกม จาก periods — พีเรียดที่ `ticking: true` คือช่วงที่นาฬิกากำลังเดิน และ `minutes`
+ * ของมันคือนาทีบนสกอร์บอร์ดจริง (ครึ่งหลังนับต่อจาก 45 ให้แล้ว) ตอนพักครึ่งไม่มีอะไร ticking
+ * จึงคืน null — ผู้เรียกใช้ state ("HT") แสดงคำว่าพักครึ่งแทนตัวเลข
+ *
+ * นี่คือเหตุผลที่เลิกคำนวณนาทีเองจากเวลาคิกออฟ: วิธีนั้นนับพักครึ่งเป็นนาทีในเกมไปด้วย
+ * (นาทีจริง 45–60 บนนาฬิกาโลก = ยังพักอยู่) และไม่มีทางรู้เวลาทดเจ็บ
+ */
+export function minuteFromPeriods(
+  periods: SportMonksPeriod[] | undefined,
+): number | null {
+  const ticking = (periods ?? []).find((period) => period.ticking === true);
+  return typeof ticking?.minutes === "number" ? ticking.minutes : null;
+}
+
+// developer_name ของ event type ที่เราสนใจ → ชนิดที่หน้าเว็บรู้จัก เหตุการณ์อื่น (เปลี่ยนตัว,
+// ใบเหลือง, VAR) จงใจไม่เอา — การ์ดหน้าแรกมีที่แค่บรรทัดสั้น ๆ เอาเฉพาะที่เปลี่ยนเกมจริง
+const EVENT_KINDS: Record<string, SportMonksLiveEvent["kind"]> = {
+  GOAL: "goal",
+  OWNGOAL: "owngoal",
+  PENALTY: "penalty",
+  REDCARD: "redcard",
+  YELLOWREDCARD: "redcard",
+};
+
+export function mapEvents(
+  events: SportMonksEvent[] | undefined,
+  homeParticipantId: number | undefined,
+): SportMonksLiveEvent[] {
+  return (events ?? [])
+    .map((event): SportMonksLiveEvent | null => {
+      const kind = EVENT_KINDS[event.type?.developer_name ?? ""];
+      if (!kind) return null;
+      return {
+        kind,
+        minute: typeof event.minute === "number" ? event.minute : null,
+        extraMinute:
+          typeof event.extra_minute === "number" ? event.extra_minute : null,
+        playerName: event.player_name ?? null,
+        side: event.participant_id === homeParticipantId ? "home" : "away",
+      };
+    })
+    .filter((event): event is SportMonksLiveEvent => event !== null)
+    .sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0));
+}
+
 function scoreFor(
   scores: SportMonksScore[],
   participantId: number | undefined,
@@ -79,7 +152,9 @@ export async function getSportMonksPremierLeagueLive(): Promise<
 
   const url = new URL(`${SPORTMONKS_BASE_URL}/livescores/inplay`);
   url.searchParams.set("api_token", token);
-  url.searchParams.set("include", "participants;scores;state");
+  // events.type คือ nested include — ให้ชื่อชนิดเหตุการณ์ (developer_name) ติดมากับ event เลย
+  // ไม่ต้องจำ type_id เป็นเลขวิเศษ; include เพิ่มไม่เสียเงินและไม่กินโควตาเพิ่ม เป็น call เดิม
+  url.searchParams.set("include", "participants;scores;state;periods;events.type");
   url.searchParams.set("leagues", String(SPORTMONKS_PREMIER_LEAGUE_ID));
 
   try {
@@ -108,6 +183,8 @@ export async function getSportMonksPremierLeagueLive(): Promise<
           awayTeam: away.name,
           homeScore: scoreFor(fixture.scores ?? [], home.id),
           awayScore: scoreFor(fixture.scores ?? [], away.id),
+          minute: minuteFromPeriods(fixture.periods),
+          events: mapEvents(fixture.events, home.id),
         } satisfies SportMonksLiveMatch;
       })
       .filter((match): match is SportMonksLiveMatch => match !== null);

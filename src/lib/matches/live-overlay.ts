@@ -1,4 +1,7 @@
-import type { SportMonksLiveMatch } from "@/lib/football/sportmonks";
+import type {
+  SportMonksLiveEvent,
+  SportMonksLiveMatch,
+} from "@/lib/football/sportmonks";
 import { sameTeam } from "@/lib/football/team-name";
 
 export { normalizeTeamName, sameTeam } from "@/lib/football/team-name";
@@ -19,6 +22,9 @@ export type MatchLike = {
   homeScore: number | null;
   awayScore: number | null;
   live: boolean;
+  /** นาทีจริงในเกม — มีเฉพาะแถวที่ทับด้วยข้อมูลสดแล้ว */
+  minute?: number | null;
+  events?: SportMonksLiveEvent[];
 };
 
 export function findLiveMatch(
@@ -59,6 +65,8 @@ export function overlayLiveScores<T extends MatchLike>(
       status: found.status,
       homeScore: found.homeScore,
       awayScore: found.awayScore,
+      minute: found.minute,
+      events: found.events,
       live: true,
     };
   });
