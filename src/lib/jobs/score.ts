@@ -1,5 +1,7 @@
 import type postgres from 'postgres';
 
+import { awardBadgesForUsers } from '@/lib/stats/profile';
+
 // คิดคะแนนแบบ idempotent ต่อลีก จากแมตช์ที่ FINISHED แล้ว
 //
 // กติกา: ทายผลแพ้/ชนะ/เสมอถูก = correct แต้ม (default 3) ผิด = wrong แต้ม (default 0)
@@ -45,8 +47,18 @@ export async function runScorePredictions(sql: postgres.Sql) {
       scored_result_version = excluded.scored_result_version,
       scored_at = now()
     where prediction_scores.scored_result_version is distinct from excluded.scored_result_version
-    returning prediction_scores.id
+    returning prediction_scores.prediction_id
   `;
+
+  // แจกเหรียญ/อัปเดตสตรีคสูงสุดให้เฉพาะคนที่คะแนนเพิ่งขยับ — เหรียญจึงมาถึงโดยไม่ต้องรอ
+  // ใครเปิด profile card (การเปิด card ก็ประเมินซ้ำได้ ผลเท่ากันเพราะ insert แบบไม่ทับของเดิม)
+  if (rows.length > 0) {
+    const users = await sql<{ user_id: string }[]>`
+      select distinct user_id from predictions
+      where id = any(${rows.map((r) => r.prediction_id as string)}::uuid[])
+    `;
+    await awardBadgesForUsers(sql, users.map((u) => u.user_id));
+  }
 
   // จำนวนนี้คือ "แถวที่เพิ่งสร้างใหม่หรือคะแนนเปลี่ยนจริง" เท่านั้น ไม่ใช่จำนวนคำทายทั้งหมด
   return { processed: rows.length };

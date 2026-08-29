@@ -50,6 +50,8 @@ export const users = pgTable("users", {
   emailVerified: timestamp("email_verified", { withTimezone: true }),
   image: text("image"),
   playerKind: playerKindEnum("player_kind").notNull().default("human"),
+  /** สตรีคสูงสุดตลอดกาล — เขียนทับเฉพาะตอนทำลายสถิติ (ดู lib/stats/profile.ts) */
+  bestStreak: smallint("best_streak").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -281,6 +283,28 @@ export const predictionScores = pgTable(
       table.leagueId,
       table.predictionId,
     ),
+  ],
+);
+
+// ========== โปรไฟล์: เหรียญตรา ==========
+export const userBadges = pgTable(
+  "user_badges",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    badgeKey: text("badge_key").notNull(),
+    earnedAt: timestamp("earned_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("user_badges_user_id_badge_key_key").on(
+      table.userId,
+      table.badgeKey,
+    ),
+    index("user_badges_user_idx").on(table.userId),
   ],
 );
 

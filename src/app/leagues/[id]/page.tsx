@@ -17,11 +17,12 @@ import { LeagueNav } from '@/components/league-nav';
 
 import { DiscordForm } from './discord-form';
 import { RemoveMemberButton } from './remove-member-button';
+import { ProfileName } from '@/components/profile-name';
 import { StandingsTable } from '@/components/standings-table';
 import { db } from '@/db/client';
 import { aiAgents, leagueMembers, leagues, seasons, users } from '@/db/schema';
 import { PlayerAvatar } from '@/components/player-avatar';
-import { displayNameSql, realNameHint } from '@/lib/display-name';
+import { displayNameSql } from '@/lib/display-name';
 import { competitionLabel } from '@/lib/football/competitions';
 import { getStandings } from '@/lib/football/standings';
 import { pendingPredictionCount } from '@/lib/leagues/pending';
@@ -142,16 +143,15 @@ export default async function LeaguePage({ params }: { params: Promise<{ id: str
                       isAi={m.playerKind === 'ai'}
                       agentKey={m.agentKey}
                     />
-                    {/* เอาเมาส์ชี้แล้วเฉลยว่าชื่อเล่นนี้คือใคร — cursor-help เป็นตัวบอกว่ามีอะไร
-                        ให้ชี้ ไม่งั้นไม่มีใครรู้ว่าต้องเอาเมาส์ไปวาง */}
-                    <span
-                      title={realNameHint(m.displayName, m.googleName)}
-                      className={`min-w-0 break-words text-sm text-foreground ${
-                        realNameHint(m.displayName, m.googleName) ? 'cursor-help' : ''
-                      }`}
-                    >
-                      {m.name}
-                    </span>
+                    {/* กดที่ชื่อ = เปิดการ์ดโปรไฟล์ (สถิติ สตรีค เหรียญตรา และชื่อจริงที่เคยอยู่
+                        ใน tooltip เดิม — tooltip ใช้บนมือถือไม่ได้เพราะไม่มีเมาส์ให้ชี้) */}
+                    <ProfileName
+                      leagueId={id}
+                      userId={m.userId}
+                      name={m.name ?? 'สมาชิก'}
+                      isAi={m.playerKind === 'ai'}
+                      className="text-sm text-foreground"
+                    />
                   </span>
                   <span className="flex shrink-0 items-center gap-1.5">
                     {m.playerKind === 'ai' && <Badge tone="accent">AI</Badge>}

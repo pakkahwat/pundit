@@ -49,6 +49,9 @@ create table users (
   email_verified timestamptz,
   image text,
   player_kind player_kind not null default 'human',
+  -- สตรีคทายถูกติดกันสูงสุดที่เคยทำได้ — สถิติถาวรของโปรไฟล์ เขียนทับเฉพาะตอนทำลายสถิติ
+  -- (greatest ใน lib/stats/profile.ts) แสดงเฉพาะค่านี้ ไม่โชว์สตรีคปัจจุบัน
+  best_streak smallint not null default 0,
   created_at timestamptz not null default now()
 );
 
@@ -230,6 +233,18 @@ create table prediction_scores (
   scored_at timestamptz not null default now(),
   unique (league_id, prediction_id)
 );
+
+-- ========== โปรไฟล์: เหรียญตราและสถิติถาวร ==========
+-- เหรียญเป็นของ "โปรไฟล์" ไม่ใช่ของลีก — ได้แล้วได้เลย ไม่ถูกถอนแม้ฟอร์มตกทีหลัง
+-- เกณฑ์การได้อยู่ใน src/lib/stats/badges.ts (ตรรกะล้วน เทสต์ได้) ตารางนี้เก็บแค่ "ใครได้อะไรเมื่อไหร่"
+create table user_badges (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  badge_key text not null,
+  earned_at timestamptz not null default now(),
+  unique (user_id, badge_key)
+);
+create index user_badges_user_idx on user_badges (user_id);
 
 -- ========== AI observability ==========
 create table ai_prediction_logs (

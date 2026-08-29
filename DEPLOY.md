@@ -51,6 +51,7 @@ Remove-Item Env:DATABASE_URL    # อย่าลืมล้างค่า ไ
 | `MISTRAL_API_KEY`              | API key จาก Mistral สำหรับ `mistral-small-latest`                                        |
 | `SPORTMONKS_API_TOKEN`         | API token จาก SportMonks — ใช้ดึงสกอร์สดของพรีเมียร์ลีกบนหน้าแรก                          |
 | `PEXELS_API_KEY`               | API key จาก pexels.com/api — ภาพสำรองของหน้าปกบทความ (ฟรี 200 req/ชม.)                    |
+| `ADMIN_EMAILS`                 | อีเมลที่เข้าหน้า /admin ได้ คั่นด้วย , — ไม่ตั้ง = ไม่มีใครเข้าได้เลย                        |
 | `CRON_SECRET`                  | สุ่มใหม่ยาว ๆ (`openssl rand -hex 32`) — ใช้ยืนยันตัวตนของ cron                          |
 
 สองอย่างนี้พลาดแล้วไม่มี error ให้เห็น จึงต้องเช็คด้วยตาเอง:

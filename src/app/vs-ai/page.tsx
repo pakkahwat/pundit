@@ -6,7 +6,15 @@ import { auth } from '@/auth';
 import { AccuracyChart, type ChartPoint } from '@/components/accuracy-chart';
 import { LinkPending } from '@/components/link-pending';
 import { TeamCrest } from '@/components/team-crest';
-import { Badge, Card, EmptyState, PageHeader, PageShell, SectionLabel } from '@/components/ui';
+import {
+  Badge,
+  Card,
+  EmptyState,
+  LinkButton,
+  PageHeader,
+  PageShell,
+  SectionLabel,
+} from '@/components/ui';
 import {
   accuracyPct,
   getAccuracyByMatchday,
@@ -65,6 +73,11 @@ export default async function VsAiPage(props: PageProps<'/vs-ai'>) {
           selectedLeague
             ? `เฉพาะผู้เล่นในลีก "${selectedLeague.name}" — วัดจากความแม่น ไม่ใช่แต้ม`
             : 'ภาพรวมทุกลีกในระบบ — วัดจากความแม่น ไม่ใช่แต้ม จึงเทียบกันได้ตรง ๆ'
+        }
+        actions={
+          <LinkButton href="/vs-ai/insights" variant="secondary">
+            เจาะลึกการทาย →
+          </LinkButton>
         }
       />
 
