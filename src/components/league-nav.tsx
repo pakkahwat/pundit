@@ -11,6 +11,7 @@ import { LinkPending } from './link-pending';
 const TABS = [
   { key: 'overview', label: 'ภาพรวม', path: '' },
   { key: 'predict', label: 'ทายผล', path: '/predict' },
+  { key: 'mine', label: 'คำทายของฉัน', path: '/my-predictions' },
   { key: 'leaderboard', label: 'อันดับ', path: '/leaderboard' },
   { key: 'reveal', label: 'คำทายทุกคน', path: '/reveal' },
 ] as const;

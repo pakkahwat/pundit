@@ -16,6 +16,7 @@ import { InviteLink } from '@/components/invite-link';
 import { LeagueNav } from '@/components/league-nav';
 
 import { DiscordForm } from './discord-form';
+import { RemoveMemberButton } from './remove-member-button';
 import { StandingsTable } from '@/components/standings-table';
 import { db } from '@/db/client';
 import { aiAgents, leagueMembers, leagues, seasons, users } from '@/db/schema';
@@ -55,6 +56,7 @@ export default async function LeaguePage({ params }: { params: Promise<{ id: str
 
   const members = await db
     .select({
+      userId: leagueMembers.userId,
       name: displayNameSql,
       displayName: users.displayName,
       googleName: users.name,
@@ -132,7 +134,7 @@ export default async function LeaguePage({ params }: { params: Promise<{ id: str
           <Card padded={false}>
             <ul className="divide-y divide-border">
               {members.map((m) => (
-                <li key={m.email ?? m.name} className="flex items-center justify-between gap-3 p-4">
+                <li key={m.userId} className="flex items-center justify-between gap-3 p-4">
                   <span className="flex min-w-0 items-center gap-2.5">
                     <PlayerAvatar
                       image={m.image}
@@ -151,9 +153,18 @@ export default async function LeaguePage({ params }: { params: Promise<{ id: str
                       {m.name}
                     </span>
                   </span>
-                  <span className="flex shrink-0 gap-1.5">
+                  <span className="flex shrink-0 items-center gap-1.5">
                     {m.playerKind === 'ai' && <Badge tone="accent">AI</Badge>}
                     {m.role === 'owner' && <Badge>เจ้าของ</Badge>}
+                    {/* เตะได้ทุกคนที่ไม่ใช่เจ้าของ (รวม AI) — ฝั่ง server เช็คสิทธิ์ซ้ำอีกชั้น
+                        การซ่อนปุ่มเป็นแค่มารยาทของ UI ไม่ใช่แนวป้องกัน */}
+                    {isOwner && m.role !== 'owner' && (
+                      <RemoveMemberButton
+                        leagueId={id}
+                        memberUserId={m.userId}
+                        memberName={m.name ?? 'สมาชิกคนนี้'}
+                      />
+                    )}
                   </span>
                 </li>
               ))}
