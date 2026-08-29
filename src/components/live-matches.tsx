@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { MatchDialog } from "./match-dialog";
 import { TeamCrest } from "./team-crest";
 import { Badge, Card } from "./ui";
 import type { SportMonksLiveEvent } from "@/lib/football/sportmonks";
@@ -47,6 +48,11 @@ export function LiveMatches({ matches }: { matches: TodayMatch[] }) {
   // เหมือนกันทั้งสองฝั่งก่อน แล้วอัปเดตใน effect ซึ่งรันหลัง hydrate เสร็จแล้วเท่านั้น
   const [offsetSec, setOffsetSec] = useState(0);
 
+  // เก็บ "id ของนัดที่เปิดดูอยู่" ไม่ใช่ตัวออบเจกต์นัด — props ถูกแทนที่ใหม่ทุกรอบที่ AutoRefresh
+  // ดึงข้อมูล ถ้าเก็บออบเจกต์ไว้ dialog จะค้างสกอร์เก่า พอเก็บ id แล้ว lookup สดทุก render
+  // สกอร์กับนาทีใน dialog ก็เดินตามข้อมูลใหม่เองโดยไม่ต้องทำอะไรเพิ่ม
+  const [openMatchId, setOpenMatchId] = useState<string | null>(null);
+
   useEffect(() => {
     // เดินนาทีละครั้งพอ — ตัวเลขที่โชว์เป็นหน่วยนาที เดินถี่กว่านี้ก็ไม่มีอะไรเปลี่ยน
     const id = setInterval(() => setOffsetSec((s) => s + 60), 60_000);
@@ -74,6 +80,18 @@ export function LiveMatches({ matches }: { matches: TodayMatch[] }) {
   // เฉพาะตอนนั้นถึงค่อยขึ้นคำอธิบาย ไม่งั้นจะไปเถียงกับสกอร์สดที่โชว์อยู่ข้าง ๆ เอง
   const needsDelayNotice = liveCount > 0 && !matches.some((m) => m.live);
 
+  const openMatch = matches.find((m) => m.id === openMatchId) ?? null;
+  const openMatchClockLabel = (() => {
+    if (!openMatch) return "";
+    const secondsSince = openMatch.secondsSinceKickoff + offsetSec;
+    const phase = phaseOf(openMatch, secondsSince);
+    if (phase === "live")
+      return liveClockLabel(openMatch, Math.floor(secondsSince / 60));
+    if (phase === "finished") return "จบแล้ว";
+    if (phase === "awaiting") return "รอผล";
+    return formatKickoffTime(openMatch.kickoffAt);
+  })();
+
   return (
     <>
       <div className="mb-3 flex items-center justify-between gap-3 text-sm text-muted">
@@ -93,12 +111,29 @@ export function LiveMatches({ matches }: { matches: TodayMatch[] }) {
           const phase = phaseOf(m, secondsSince);
           const elapsedMin = Math.floor(secondsSince / 60);
 
+          const clickable = phase === "live" || phase === "finished";
+
           return (
             <li key={m.id}>
+              {/* ปุ่มครอบทั้งการ์ด ไม่ใช่ลิงก์เล็ก ๆ ข้างใน — บนมือถือทั้งใบคือเป้ากดเดียว
+                เปิดเฉพาะนัดที่มีเรื่องให้ดูเพิ่ม (กำลังแข่ง/จบแล้ว) นัดที่ยังไม่เตะกดไปก็ว่างเปล่า */}
               <Card
+                onClick={clickable ? () => setOpenMatchId(m.id) : undefined}
+                role={clickable ? "button" : undefined}
+                tabIndex={clickable ? 0 : undefined}
+                onKeyDown={
+                  clickable
+                    ? (e: React.KeyboardEvent) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setOpenMatchId(m.id);
+                        }
+                      }
+                    : undefined
+                }
                 className={`flex h-full animate-fade-up flex-col gap-3 ${
                   phase === "live" ? "border-accent/50" : ""
-                }`}
+                } ${clickable ? "cursor-pointer transition-colors hover:border-accent/60 hover:bg-surface-hover" : ""}`}
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs text-muted">
@@ -180,6 +215,12 @@ export function LiveMatches({ matches }: { matches: TodayMatch[] }) {
         })}
       </ul>
       {needsDelayNotice && <LiveNotice />}
+
+      <MatchDialog
+        match={openMatch}
+        clockLabel={openMatchClockLabel}
+        onClose={() => setOpenMatchId(null)}
+      />
     </>
   );
 }

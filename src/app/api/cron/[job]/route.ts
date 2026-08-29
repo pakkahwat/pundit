@@ -1,5 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 
 import { sqlClient } from '@/db/client';
 import { runAiPredictions } from '@/lib/jobs/ai-predictions';
@@ -21,6 +21,19 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 const JOB_TIMEOUT_MS = 55_000;
+
+// งานที่ต้องตอบกลับทันทีแล้วไปทำต่อเบื้องหลัง (ผ่าน after ของ Next) แทนการให้ HTTP รอจนจบ
+//
+// ที่มา: cron-job.org รอคำตอบได้สูงสุดราว 30 วิ แต่งาน AI ตั้งใจใช้เวลาถึง 55 วิ (LLM call เดียว
+// ก็กินได้ 10-20 วิ) — ถ้าให้รอแบบเดิม ฝั่ง cron จะรายงาน "Failed (timeout)" ทุกรอบที่มีงานเยอะ
+// ทั้งที่งานสำเร็จ และที่อันตรายจริงคือ cron-job.org ปิด job อัตโนมัติเมื่อ fail ติดกันหลายครั้ง
+// = AI หยุดทายทั้งระบบแบบเงียบสนิท
+//
+// after() ให้ function ทำงานต่อหลังส่ง response ได้จนถึง maxDuration เดิม (60 วิ) — งบเวลา
+// ของงานจึงไม่เสียไปแม้แต่วินาทีเดียว ข้อแลกเปลี่ยน: cron-job.org จะเห็น 200 เสมอแม้งานพังกลางทาง
+// ผลจริงต้องดูจากตาราง cron_runs (ซึ่ง withCronRun บันทึกให้ครบทั้งสำเร็จและพังอยู่แล้ว)
+// ยอมแลกเพราะ "การแจ้งเตือนผิด ๆ จนโดนปิด job" อันตรายกว่า "ไม่ได้อีเมลแจ้งเตือนตอนพัง"
+const BACKGROUND_JOBS = new Set<JobName>(['ai-predictions']);
 
 // เทียบ secret แบบ timing-safe — การเทียบสตริงด้วย === จะหยุดทันทีที่เจอตัวอักษรต่างกัน ทำให้
 // เวลาที่ใช้บอกใบ้ได้ว่าเดาถูกไปกี่ตัว ซึ่งพอจะใช้ค่อย ๆ เดา secret ทีละตัวได้จริง
@@ -67,6 +80,18 @@ export async function POST(request: Request, ctx: RouteContext<'/api/cron/[job]'
       { error: 'unknown job', available: Object.keys(JOBS) },
       { status: 404 },
     );
+  }
+
+  if (BACKGROUND_JOBS.has(job as JobName)) {
+    after(async () => {
+      try {
+        await JOBS[job as JobName]();
+      } catch (err) {
+        // withCronRun บันทึกลง cron_runs ให้แล้ว — log ซ้ำไว้ให้เห็นใน Vercel logs อีกทาง
+        console.error(`cron job ${job} (background) ล้มเหลว:`, err);
+      }
+    });
+    return NextResponse.json({ ok: true, job, started: true });
   }
 
   try {

@@ -150,21 +150,35 @@ export async function getSportMonksPremierLeagueLive(): Promise<
   const token = process.env.SPORTMONKS_API_TOKEN;
   if (!token) return null;
 
-  const url = new URL(`${SPORTMONKS_BASE_URL}/livescores/inplay`);
-  url.searchParams.set("api_token", token);
-  // events.type คือ nested include — ให้ชื่อชนิดเหตุการณ์ (developer_name) ติดมากับ event เลย
-  // ไม่ต้องจำ type_id เป็นเลขวิเศษ; include เพิ่มไม่เสียเงินและไม่กินโควตาเพิ่ม เป็น call เดิม
-  url.searchParams.set("include", "participants;scores;state;periods;events.type");
-  url.searchParams.set("leagues", String(SPORTMONKS_PREMIER_LEAGUE_ID));
+  // ลองชุด include เต็มก่อน (นาทีจริง + เหตุการณ์) แล้วค่อยถอยไปชุดพื้นฐาน —
+  // สิทธิ์ของแต่ละ include ขึ้นกับแผนของบัญชี ถ้าแผนไม่มีสิทธิ์ตัวไหน API จะปฏิเสธ
+  // "ทั้ง call" ไม่ใช่แค่ตัด include นั้นทิ้ง การยึดชุดเต็มอย่างเดียวจึงเสี่ยงทำสกอร์สด
+  // ที่เคยได้อยู่หายเกลี้ยง เพราะไปขอของที่แผนไม่ให้เพิ่มอีกอย่างเดียว
+  const INCLUDE_SETS = [
+    // events.type คือ nested include — ให้ชื่อชนิดเหตุการณ์ (developer_name) ติดมากับ event
+    // เลย ไม่ต้องจำ type_id เป็นเลขวิเศษ; include เพิ่มไม่กินโควตาเพิ่ม เป็น call เดิม
+    "participants;scores;state;periods;events.type",
+    "participants;scores;state",
+  ];
 
   try {
-    const response = await fetch(url, {
-      headers: { Accept: "application/json" },
-      next: { revalidate: 30 },
-    });
-    if (!response.ok) return null;
+    let payload: SportMonksResponse | null = null;
+    for (const include of INCLUDE_SETS) {
+      const url = new URL(`${SPORTMONKS_BASE_URL}/livescores/inplay`);
+      url.searchParams.set("api_token", token);
+      url.searchParams.set("include", include);
+      url.searchParams.set("leagues", String(SPORTMONKS_PREMIER_LEAGUE_ID));
 
-    const payload = (await response.json()) as SportMonksResponse;
+      const response = await fetch(url, {
+        headers: { Accept: "application/json" },
+        next: { revalidate: 30 },
+      });
+      if (response.ok) {
+        payload = (await response.json()) as SportMonksResponse;
+        break;
+      }
+    }
+    if (!payload) return null;
 
     return (payload.data ?? [])
       .map((fixture) => {

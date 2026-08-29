@@ -1,5 +1,9 @@
 import Link from 'next/link';
-import type { ComponentProps, ReactNode } from 'react';
+import type {
+  ComponentProps,
+  ComponentPropsWithoutRef,
+  ReactNode,
+} from 'react';
 
 import { LinkPending } from './link-pending';
 
@@ -70,13 +74,15 @@ export function Card({
   children,
   className = '',
   padded = true,
+  ...rest
 }: {
   children: ReactNode;
   className?: string;
   padded?: boolean;
-}) {
+} & ComponentPropsWithoutRef<'div'>) {
   return (
     <div
+      {...rest}
       className={`rounded-xl border border-border bg-surface ${padded ? 'p-5' : ''} ${className}`}
     >
       {children}
