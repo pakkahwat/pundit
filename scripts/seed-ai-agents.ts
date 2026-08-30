@@ -108,17 +108,11 @@ const AGENTS: AgentSeed[] = [
     strategy: "llm",
     systemPrompt: null,
   },
-  {
-    // ค่ายที่หายไปจากสนาม — บัญชีเป็น Evaluation access (ฟรีในโควตาจำกัด) ซึ่งพอสำหรับ
-    // งานนี้ที่ยิงไม่กี่สิบครั้งต่อแมตช์เดย์แบบเว้นจังหวะ 5 วิ ถ้าวันไหนชนโควตา ระบบก็แค่
-    // ข้ามรอบนั้นแล้วรอบถัดไปทายต่อ (idempotent) ไม่มีอะไรพังถาวร
-    agentKey: "claude-haiku",
-    displayName: "นักปราชญ์ส้ม (Claude Haiku 4.5)",
-    provider: "anthropic",
-    modelId: "claude-haiku-4-5",
-    strategy: "llm",
-    systemPrompt: null,
-  },
+  // "นักปราชญ์ส้ม (Claude Haiku 4.5)" ถอดออก 30 ส.ค. 2026 ก่อนได้ลงสนามจริง — แผน
+  // Evaluation access ของ Anthropic ให้สร้าง key ได้แต่ยิง API ต้องมีเครดิต (ขั้นต่ำ $5)
+  // ทดสอบแล้วเจอ "credit balance is too low" ตัดสินใจไม่จ่าย — provider anthropic ใน
+  // llm.ts คงไว้ครบ วันไหนเปลี่ยนใจเติมเครดิต แค่เพิ่มบล็อกนี้กลับมา + ใส่ ANTHROPIC_API_KEY
+  // แล้วรัน seed ใหม่ ใช้ได้ทันที
   // "มังกรหยก (Qwen Max Free)" ปลดประจำการ 30 ส.ค. 2026 — TokenRouter ถอด channel ของ
   // qwen3.8-max-free ออก (แคตตาล็อกยังลิสต์อยู่แต่เรียกแล้ว "No available channel" ทุกครั้ง
   // และทั้งบัญชีเหลือโมเดลนั้นตัวเดียว) การเอาออกจากลิสต์นี้ทำให้ seed ตั้ง is_active = false

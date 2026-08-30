@@ -10,7 +10,8 @@ config({ path: path.resolve(__dirname, "../.env.local") });
 
 // เทสว่าต่อ Gemini ติดและ structured output ทำงานถูก โดยไม่ต้องแตะ DB เลย — ใช้ context ปลอม
 // ที่แต่งขึ้นมาเอง เพื่อแยกปัญหา "ต่อ LLM ไม่ได้" ออกจาก "ข้อมูลใน DB ไม่พร้อม" ให้ชัด
-// ใช้: npx tsx scripts/test-llm.ts [model-id]
+// ใช้: npx tsx scripts/test-llm.ts [provider] [model-id]
+// เช่น: npx tsx scripts/test-llm.ts anthropic claude-haiku-4-5
 
 const f = (results: string, opponent: string) =>
   results.split("").map((r) => ({
@@ -61,7 +62,11 @@ async function main() {
   const provider = process.argv[2] ?? "google";
   const modelId = process.argv[3] ?? "gemini-flash-lite-latest";
 
+  // ลิสต์ env ต่อ provider — เคย hardcode แยกไว้ตรงนี้แล้วลืมอัปเดตตอนเพิ่ม anthropic
+  // จนสคริปต์เด้งผู้ใช้ก่อนถึง llm.ts ตัวจริง (เสียเวลาไล่ผีกันยกใหญ่) — ขยายให้ครบและ
+  // ถ้าเพิ่ม provider ใหม่อีกในอนาคต ให้เพิ่มทั้งสองที่: llm.ts และตารางนี้
   const ENV_BY_PROVIDER: Record<string, string> = {
+    anthropic: "ANTHROPIC_API_KEY",
     google: "GOOGLE_GENERATIVE_AI_API_KEY",
     groq: "GROQ_API_KEY",
     mistral: "MISTRAL_API_KEY",

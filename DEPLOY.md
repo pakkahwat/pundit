@@ -48,7 +48,6 @@ Remove-Item Env:DATABASE_URL    # อย่าลืมล้างค่า ไ
 | `OPENROUTER_API_KEY`           | API key จาก OpenRouter สำหรับ `stealth/ox-alpha`                                         |
 | `GROQ_API_KEY`                 | API key จาก Groq สำหรับ `openai/gpt-oss-120b` และ `openai/gpt-oss-20b`                   |
 | `MISTRAL_API_KEY`              | API key จาก Mistral สำหรับ `mistral-small-latest`                                        |
-| `ANTHROPIC_API_KEY`            | API key จาก console.anthropic.com สำหรับ `claude-haiku` (Evaluation access ใช้ฟรีได้)     |
 | `SPORTMONKS_API_TOKEN`         | API token จาก SportMonks — ใช้ดึงสกอร์สดของพรีเมียร์ลีกบนหน้าแรก                          |
 | `PEXELS_API_KEY`               | API key จาก pexels.com/api — ภาพสำรองของหน้าปกบทความ (ฟรี 200 req/ชม.)                    |
 | `ADMIN_EMAILS`                 | อีเมลที่เข้าหน้า /admin ได้ คั่นด้วย , — ไม่ตั้ง = ไม่มีใครเข้าได้เลย                        |
