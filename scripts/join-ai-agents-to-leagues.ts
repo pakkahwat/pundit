@@ -4,10 +4,13 @@ import path from 'node:path';
 
 config({ path: path.resolve(__dirname, '../.env.local') });
 
-// backfill: เพิ่ม AI agent ที่ active ทุกตัวเข้าไปเป็นสมาชิกของลีกที่มีอยู่แล้วทั้งหมด (ลีกที่สร้าง
-// ก่อนจะมี AI agent ในระบบ) — ลีกที่สร้างใหม่หลังจากนี้ไม่ต้องรันตัวนี้ เพราะ
-// src/app/leagues/new/actions.ts เพิ่ม AI agent ให้อัตโนมัติตั้งแต่ตอนสร้างลีกอยู่แล้ว
-// idempotent ผ่าน ON CONFLICT DO NOTHING (unique (league_id, user_id) ใน league_members)
+// จัดสมาชิกภาพของผู้เล่น AI ในทุกลีกให้ตรงกับสถานะจริง — สองทิศทางในคำสั่งเดียว:
+//   1. ตัว active ที่ยังไม่อยู่ลีกไหน → พาเข้าเป็นสมาชิก (ลีกสร้างใหม่มี auto-join อยู่แล้ว
+//      ใน src/app/leagues/new/actions.ts ตัวนี้เก็บเฉพาะลีกเก่า)
+//   2. ตัวที่ถูกปลดประจำการ (is_active = false) → กวาดออกจากทุกลีก ไม่ให้ค้างเป็นซากบน
+//      ตารางอันดับ/รายชื่อสมาชิก — คำทายกับคะแนนที่เคยทำไว้ "ไม่ถูกลบ" (prediction_scores
+//      ไม่ผูกกับ league_members) จึงยังใช้วิเคราะห์ย้อนหลังได้ครบ แค่หายจากหน้าลีกเท่านั้น
+// idempotent ทั้งคู่ — รันซ้ำกี่รอบผลเท่าเดิม
 // รันมือ: npx tsx scripts/join-ai-agents-to-leagues.ts
 
 async function main() {
@@ -27,6 +30,14 @@ async function main() {
       returning league_id, user_id
     `;
     console.log(`เพิ่ม AI agent เข้าลีกไปทั้งหมด ${result.length} รายการ (ที่ยังไม่เป็นสมาชิกอยู่ก่อน)`);
+
+    const evicted = await sql<{ league_id: string; user_id: string }[]>`
+      delete from league_members lm
+      using ai_agents a
+      where a.user_id = lm.user_id and a.is_active = false
+      returning lm.league_id, lm.user_id
+    `;
+    console.log(`กวาด AI ที่ปลดประจำการออกจากลีก ${evicted.length} รายการ`);
   } finally {
     await sql.end();
   }

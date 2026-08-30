@@ -189,7 +189,10 @@ export default async function AdminPage() {
                     ทายสำเร็จล่าสุด {timeAgo(agent.last_ok)} · 7 วัน: สำเร็จ {agent.ok_7d} / พัง {agent.fails_7d}
                   </span>
                 </div>
-                {lastErrorNewer && agent.last_error && (
+                {/* ตัวที่ปิดใช้งานแล้วไม่โชว์ error — มันเป็นประวัติจากตอนยังเปิดอยู่ โชว์ไป
+                  ชวนให้เข้าใจผิดว่า "ยังพังอยู่" ทั้งที่ระบบข้ามตัวนั้นไปแล้ว ไม่มีการยิงใหม่เกิดขึ้น
+                  (เจอเข้าใจผิดจริงมาแล้วกับ claude-haiku/token-router หลัง deactivate) */}
+                {agent.is_active && lastErrorNewer && agent.last_error && (
                   <p className="break-all text-xs text-danger">
                     ล่าสุด ({timeAgo(agent.last_error_at)}): {agent.last_error.slice(0, 250)}
                   </p>
