@@ -118,7 +118,9 @@ export default async function SettingsPage(props: {
             (
               select sum(ps.points_awarded)::int from prediction_scores ps
               where ps.prediction_id = p.id
-                and ps.league_id = any(${leagueIds}::uuid[])
+                -- drizzle กาง array เป็นลิสต์ ($1,$2) ไม่ใช่ param array ก้อนเดียวแบบ postgres.js
+                -- เขียน any(...::uuid[]) จึงกลายเป็น cast แถวเป็น uuid[] แล้วพังทั้ง query (เจอบน prod)
+                and ps.league_id in ${leagueIds}
             ) as "pointsAwarded"
           from predictions p
           join matches m on m.id = p.match_id
