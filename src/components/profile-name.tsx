@@ -8,8 +8,9 @@ import type { ProfileBadge } from "@/lib/stats/profile";
 // ── การ์ดโปรไฟล์ผู้ทาย: กดที่ชื่อแล้วเด้งขึ้นมา ─────────────────────────────────
 //
 // มาแทน tooltip เฉลยชื่อจริงแบบเดิม — tooltip ใช้บนมือถือไม่ได้เลย (ไม่มีเมาส์ให้ชี้)
-// และจุได้แค่บรรทัดเดียว การ์ดนี้กดได้ทุกอุปกรณ์ โชว์ทั้งชื่อจริง สถิติ สตรีคสูงสุด
-// และเหรียญตราที่เก็บถาวรบนโปรไฟล์ (ดู lib/stats/badges.ts)
+// และจุได้แค่บรรทัดเดียว การ์ดนี้กดได้ทุกอุปกรณ์ โชว์ชื่อจริง สถิติ "เฉพาะลีกที่เปิดดู"
+// (เปิดจากหน้าลีกไหนก็เล่าเรื่องลีกนั้น) ส่วนสตรีค+เหรียญตราเป็นของโปรไฟล์รวมทุกลีก
+// สรุปรวมทุกลีกแบบเต็ม ๆ อยู่ที่หน้า /settings (ดู lib/stats/badges.ts)
 //
 // โหลดตอนกดเปิดครั้งแรกเท่านั้นแล้วจำไว้ (แนวเดียวกับ h2h-dialog) — หน้าลีกมีชื่อคนเป็นสิบ
 // ถ้าดึงล่วงหน้าทุกคนคือ N queries ต่อการเปิดหน้าเดียว ทั้งที่ผู้ใช้กดดูจริงแค่บางคน
@@ -29,7 +30,13 @@ type ProfilePayload = {
     bestStreak: number;
     recentForm: boolean[];
   };
-  league: { scored: number; correct: number; points: number };
+  league: {
+    scored: number;
+    correct: number;
+    points: number;
+    accuracy: number | null;
+    recentForm: boolean[];
+  };
   badges: ProfileBadge[];
 };
 
@@ -130,42 +137,44 @@ export function ProfileName({
 
           {data && (
             <>
+              {/* สถิติหลัก = เฉพาะลีกนี้ (นับเฉพาะนัดที่จบและตัดคะแนนแล้ว —
+                นัดที่ทายไว้แต่ยังไม่เตะ/ยังไม่ตัดคะแนน จะยังไม่โผล่ในตัวเลขพวกนี้) */}
               <div className="grid grid-cols-3 gap-2 text-center">
                 <Stat
                   label="ความแม่น"
                   value={
-                    data.overall.accuracy !== null
-                      ? `${Math.round(data.overall.accuracy * 100)}%`
+                    data.league.accuracy !== null
+                      ? `${Math.round(data.league.accuracy * 100)}%`
                       : "—"
                   }
                 />
                 <Stat
                   label="ทายถูก"
-                  value={`${data.overall.correct}/${data.overall.finished}`}
+                  value={`${data.league.correct} จาก ${data.league.scored} นัด`}
                 />
-                <Stat
-                  label="สตรีคสูงสุด"
-                  value={
-                    data.overall.bestStreak > 0
-                      ? `${data.overall.bestStreak} นัด`
-                      : "—"
-                  }
-                />
+                <Stat label="แต้ม" value={`${data.league.points}`} />
               </div>
+              <p className="-mt-2 text-center text-[11px] text-muted">
+                สถิติเฉพาะลีกนี้ · นับเฉพาะนัดที่จบแล้ว
+              </p>
 
+              {/* แถบโปรไฟล์รวม — สตรีคสูงสุดเป็นสมบัติประจำตัวข้ามลีก ไม่รีเซ็ตตามลีก */}
               <div className="flex items-center justify-between gap-2 rounded-lg bg-surface-hover px-3 py-2 text-xs">
-                <span className="text-muted">ในลีกนี้</span>
+                <span className="text-muted">รวมทุกลีก</span>
                 <span className="text-foreground">
-                  {data.league.correct}/{data.league.scored} นัด ·{" "}
-                  {data.league.points} แต้ม
+                  ถูก {data.overall.correct} จาก {data.overall.finished} นัดที่จบ ·
+                  สตรีคสูงสุด{" "}
+                  {data.overall.bestStreak > 0
+                    ? `${data.overall.bestStreak} นัด`
+                    : "—"}
                 </span>
               </div>
 
-              {data.overall.recentForm.length > 0 && (
+              {data.league.recentForm.length > 0 && (
                 <div className="flex items-center gap-2 text-xs text-muted">
-                  <span>ฟอร์ม 5 นัดล่าสุด</span>
+                  <span>ฟอร์ม 5 นัดล่าสุด (ลีกนี้)</span>
                   <span className="flex gap-1">
-                    {data.overall.recentForm.map((correct, index) => (
+                    {data.league.recentForm.map((correct, index) => (
                       <span
                         key={index}
                         className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold ${

@@ -40,15 +40,22 @@ export type LeagueProfile = {
     /** ผล 5 นัดจบล่าสุด เรียงเก่า→ใหม่ (true = ถูก) */
     recentForm: boolean[];
   };
-  /** สถิติเฉพาะลีกที่กดดูจาก — แต้มเป็นของลีกใครลีกมัน */
-  league: { scored: number; correct: number; points: number };
+  /** สถิติเฉพาะลีกที่กดดูจาก — การ์ดโปรไฟล์ในลีกโชว์ก้อนนี้เป็นหลัก (ภาพรวมไปอยู่ /settings) */
+  league: {
+    scored: number;
+    correct: number;
+    points: number;
+    accuracy: number | null;
+    /** ผล 5 นัดจบล่าสุด "เฉพาะฤดูกาลของลีกนี้" เรียงเก่า→ใหม่ */
+    recentForm: boolean[];
+  };
   badges: ProfileBadge[];
 };
 
 async function fetchScoredRows(
   sql: postgres.Sql,
   userId: string,
-): Promise<(ScoredRow & { predictedAt: string })[]> {
+): Promise<(ScoredRow & { predictedAt: string; seasonId: string })[]> {
   // majority ใช้ mode() ของคำทายทั้งหมดในนัดนั้น (อ่านได้เพราะนัดจบ = locked แล้ว)
   const rows = await sql<
     {
@@ -59,11 +66,12 @@ async function fetchScoredRows(
       submitted_hour_bkk: number | null;
       against_majority: boolean;
       kickoff_at: string;
+      season_id: string;
     }[]
   >`
     with mine as (
       select p.id, p.match_id, p.predicted_outcome, p.submitted_at,
-        m.kickoff_at, m.matchday,
+        m.kickoff_at, m.matchday, m.season_id,
         case
           when m.home_score > m.away_score then 'HOME'
           when m.home_score < m.away_score then 'AWAY'
@@ -97,7 +105,8 @@ async function fetchScoredRows(
           and mine.predicted_outcome is distinct from maj.majority_outcome,
         false
       ) as against_majority,
-      mine.kickoff_at::text as kickoff_at
+      mine.kickoff_at::text as kickoff_at,
+      mine.season_id
     from mine
     left join majority maj on maj.match_id = mine.match_id
     order by mine.kickoff_at asc
@@ -112,6 +121,7 @@ async function fetchScoredRows(
       row.submitted_hour_bkk === null ? null : Number(row.submitted_hour_bkk),
     againstMajority: row.against_majority,
     predictedAt: row.kickoff_at,
+    seasonId: row.season_id,
   }));
 }
 
@@ -150,6 +160,14 @@ export async function getLeagueProfile(
   userId: string,
 ): Promise<LeagueProfile> {
   const scoredRows = await fetchScoredRows(sql, userId);
+  const [leagueRow] = await sql<{ season_id: string }[]>`
+    select season_id from leagues where id = ${leagueId}::uuid
+  `;
+  // ฟอร์มรายลีก = กรองจากแถวรวมที่ดึงมาแล้ว ไม่ยิง query เพิ่ม — เหรียญ/สตรีคยังคิดจากทุกลีก
+  // ตามหลักที่ตกลงไว้ว่าเป็นสมบัติของ "โปรไฟล์" ส่วนความแม่น/ฟอร์มเป็นเรื่องของสนามที่กำลังดู
+  const leagueRows = scoredRows.filter(
+    (row) => row.seasonId === leagueRow?.season_id,
+  );
   const finished = scoredRows.length;
   const correct = scoredRows.filter((row) => row.correct).length;
   const streaks = computeStreaks(scoredRows);
@@ -211,6 +229,11 @@ export async function getLeagueProfile(
       scored: leagueStats?.scored ?? 0,
       correct: leagueStats?.correct ?? 0,
       points: leagueStats?.points ?? 0,
+      accuracy:
+        (leagueStats?.scored ?? 0) > 0
+          ? (leagueStats!.correct ?? 0) / leagueStats!.scored
+          : null,
+      recentForm: leagueRows.slice(-5).map((row) => row.correct),
     },
     badges: badgeRows
       .filter((row) => isBadgeKey(row.badge_key))

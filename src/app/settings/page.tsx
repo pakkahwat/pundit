@@ -94,6 +94,9 @@ export default async function SettingsPage(props: {
   // ประวัติคำทาย — ผ่าน withUserContext เพราะ RLS ซ่อนคำทายนัดที่ยังไม่เตะจากคนที่ไม่ประกาศตัว
   // แต้มต่อแถว: โหมดรายลีก = แต้มของลีกนั้น, โหมดทั้งหมด = ผลรวมทุกลีกที่อยู่ (คำทายเดียว
   // ถูกคิดคะแนนแยกทุกลีก คนอยู่สองลีกทายถูกหนึ่งนัดจึงได้ +3 สองก้อน = โชว์ +6 ตามจริง)
+  // ครอบทั้งก้อนแล้วเก็บ error มาโชว์บนหน้า — หน้า 500 ของ Next ซ่อนสาเหตุจริงจนไล่ปัญหา
+  // ข้ามเครื่องไม่ได้เลย (เจอมาแล้ว) ข้อความนี้เห็นเฉพาะเจ้าของโปรไฟล์เอง ไม่รั่วถึงใคร
+  let loadError: string | null = null;
   const rows = leagueIds.length
     ? await withUserContext(userId, (tx) =>
         tx.execute<
@@ -130,7 +133,10 @@ export default async function SettingsPage(props: {
             }
           order by m.kickoff_at desc
         `),
-      )
+      ).catch((err) => {
+        loadError = String(err);
+        return [] as (Omit<ProfileRow, "kickoffAt"> & { kickoffAt: string })[];
+      })
     : [];
 
   const badges = badgeKeys
@@ -181,6 +187,17 @@ export default async function SettingsPage(props: {
         </Card>
       </section>
 
+      {loadError && (
+        <Card className="mb-6 border-danger/40">
+          <p className="text-sm font-medium text-danger">
+            โหลดประวัติคำทายไม่สำเร็จ — ส่งข้อความนี้ให้คนดูแลระบบได้เลย:
+          </p>
+          <p className="mt-1 break-all font-mono text-xs text-muted">
+            {loadError}
+          </p>
+        </Card>
+      )}
+
       <section className="mb-4">
         <SectionLabel>สถิติการทาย</SectionLabel>
         {/* ตัวกรองเป็นลิงก์ล้วน (แนวเดียวกับตัวสลับลีกหน้า vs-ai) — บุ๊กมาร์กได้ ปุ่ม back ทำงาน */}
@@ -207,7 +224,7 @@ export default async function SettingsPage(props: {
           <StatCard label="ทายไปแล้ว" value={`${rows.length} นัด`} />
           <StatCard
             label="ทายถูก"
-            value={`${correct.length}/${finished.length} นัด`}
+            value={`${correct.length} จาก ${finished.length} นัด`}
           />
           <StatCard
             label="ความแม่น"
