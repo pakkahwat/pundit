@@ -94,13 +94,17 @@ const AGENTS: AgentSeed[] = [
     systemPrompt: null,
   },
   {
+    // ประวัติการย้ายบ้านของนินจา (agent_key คงเดิมเพื่อรักษาคำทาย/คะแนนเก่าไว้):
+    // 1. stealth/ox-alpha (OpenRouter) — ช่วงทดสอบจบ ทุก call พัง 1,369 ครั้ง/สัปดาห์
+    // 2. z-ai/glm-5.2:free (OpenRouter) — โมเดลฟรีบน OpenRouter ใช้ pool กลางร่วมกันทั้งเว็บ
+    //    ทดสอบจริงแล้ว 429 "temporarily rate-limited upstream" พร้อมกันทุกโมเดลฟรี เชื่อถือไม่ได้
+    // 3. ปัจจุบัน: qwen/qwen3.8-27b บน Groq — ฟรีแบบโควตาต่อบัญชี (ไม่ใช่ pool กลาง) เสถียร
+    //    เท่าที่พิสูจน์จาก agent gpt-oss สองตัว และได้โจทย์วิจัยแถม: Qwen ตระกูลเดียวกัน
+    //    คนละขนาดกับ "มังกรหยก" (Max) — ขนาดโมเดลมีผลกับการทายบอลไหม
     agentKey: "open-router",
-    // เดิมคือ stealth/ox-alpha — ช่วงทดสอบจบแล้ว (เฉลยว่าคือ GLM-5.3 Flash ของ ZAI ซึ่งเป็น
-    // โมเดลเสียเงิน) ทุก call เลยพังรัวจนหน้า admin ฟ้อง 1,369 ครั้ง/สัปดาห์ ย้ายมาอยู่
-    // GLM-5.2:free — ตระกูลเดียวกัน ตัวตน "นินจา GLM" คงเดิม และฟรีจริง ไม่ต้องเติมเครดิต
-    displayName: "นินจาเงียบเหงา (GLM-5.2)",
-    provider: "openrouter",
-    modelId: "z-ai/glm-5.2:free",
+    displayName: "นินจาเงียบเหงา (Qwen3.8 27B)",
+    provider: "groq",
+    modelId: "qwen/qwen3.8-27b",
     strategy: "llm",
     systemPrompt: null,
   },

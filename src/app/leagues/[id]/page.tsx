@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { Suspense } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -87,6 +87,26 @@ export default async function LeaguePage({
     .leftJoin(aiAgents, eq(aiAgents.userId, leagueMembers.userId))
     .where(eq(leagueMembers.leagueId, id));
 
+  // คะแนนสะสมในลีกนี้ของแต่ละคน — ดึงก้อนเดียวแล้วประกบใน JS (สมาชิกหลักสิบ ไม่คุ้มทำ SQL ซับซ้อน)
+  const pointRows = await db.execute<{ user_id: string; points: number }>(sql`
+    select p.user_id, coalesce(sum(ps.points_awarded), 0)::int as points
+    from prediction_scores ps
+    join predictions p on p.id = ps.prediction_id
+    where ps.league_id = ${id}::uuid
+    group by p.user_id
+  `);
+  const pointsByUser = new Map(pointRows.map((r) => [r.user_id, r.points]));
+
+  // คนจริงขึ้นก่อน AI เสมอ — ลีกเป็นของคน AI เป็นแขกรับเชิญ ภายในกลุ่มเรียงคะแนนมากไปน้อย
+  const sortedMembers = [...members].sort((a, b) => {
+    const aAi = a.playerKind === "ai" ? 1 : 0;
+    const bAi = b.playerKind === "ai" ? 1 : 0;
+    if (aAi !== bAi) return aAi - bAi;
+    const diff =
+      (pointsByUser.get(b.userId) ?? 0) - (pointsByUser.get(a.userId) ?? 0);
+    return diff !== 0 ? diff : (a.name ?? "").localeCompare(b.name ?? "", "th");
+  });
+
   const pending = await pendingPredictionCount(
     league.seasonId,
     await getCurrentMatchday(league.seasonId),
@@ -135,7 +155,7 @@ export default async function LeaguePage({
           <SectionLabel>ผู้เล่นในลีก ({members.length})</SectionLabel>
           <Card padded={false}>
             <ul className="divide-y divide-border">
-              {members.map((m) => (
+              {sortedMembers.map((m) => (
                 <li
                   key={m.userId}
                   className="flex items-center justify-between gap-3 p-4"
@@ -158,6 +178,12 @@ export default async function LeaguePage({
                     />
                   </span>
                   <span className="flex shrink-0 items-center gap-1.5">
+                    <span className="min-w-10 text-right text-sm font-semibold tabular-nums text-foreground">
+                      {pointsByUser.get(m.userId) ?? 0}
+                      <span className="ml-0.5 text-[10px] font-normal text-muted">
+                        แต้ม
+                      </span>
+                    </span>
                     {m.playerKind === "ai" && <Badge tone="accent">AI</Badge>}
                     {m.role === "owner" && <Badge>เจ้าของ</Badge>}
                     {/* เตะได้ทุกคนที่ไม่ใช่เจ้าของ (รวม AI) — ฝั่ง server เช็คสิทธิ์ซ้ำอีกชั้น
