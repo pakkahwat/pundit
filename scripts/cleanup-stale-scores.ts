@@ -32,6 +32,9 @@ async function main() {
       where p.id = ps.prediction_id
         and m.id = p.match_id
         and (m.status <> 'FINISHED' or m.home_score is null or m.away_score is null)
+        -- เฉพาะนัดที่ยังไม่ถึงเวลาเตะ: นัดที่เตะแล้วแต่ DB ไม่มีผล = ข้อมูลฝั่ง API ค้าง
+        -- ไม่ใช่แต้มหลอน (ดู db:recover-results) — เคยลบพลาดมาแล้ว 71 แถว อย่าซ้ำรอย
+        and m.kickoff_at > now()
       returning ps.prediction_id
     `;
     console.log(`ลบแต้มผีแล้ว ${stale.length} แถว`);
