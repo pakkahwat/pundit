@@ -53,18 +53,21 @@ export async function upsertMatch(
       matchday = excluded.matchday,
       home_team_id = excluded.home_team_id,
       away_team_id = excluded.away_team_id,
-      -- การ์ดกันดาวน์เกรด: football-data (แผนฟรี) เคยส่งข้อมูลเก่าย้อนมา — นัดที่จบแล้ว
-      -- มีสกอร์ครบ กลับถูกส่งมาเป็น TIMED ไม่มีสกอร์อีกรอบ ถ้าเชื่อข้อมูลรอบล่าสุดเสมอ
-      -- นัดจบจะ "ถอยกลับเป็นยังไม่เตะ" ทั้งที่แต้มถูกตัดไปแล้ว (เกิดจริงบน prod: MD2 หาย
-      -- 4 นัด สถิติหน้าเว็บขัดแย้งกับตารางคะแนนที่มาจาก endpoint standings) — จึงยึดหลัก
-      -- "ผลที่จบแล้วไม่มีวันหายเอง มีแต่แก้เป็นผลจบใหม่": ทับได้เฉพาะเมื่อข้อมูลใหม่ก็เป็น
-      -- นัดจบ+สกอร์ครบเช่นกัน (รองรับผลแก้ย้อนหลัง) นอกนั้นตรึงของเดิมทั้ง status/สกอร์/เวลาเตะ
-      -- (dev ที่ใช้ test-simulate-finish ต้องล้างด้วย db:reset-play เอง — การ์ดนี้กันคืนสภาพให้)
+      -- การ์ดกันข้อมูลเก่าทับผลจริง: football-data (แผนฟรี) เชื่อรอบล่าสุดเสมอไม่ได้ —
+      -- เจอมาแล้วทั้งสองทิศ: (ก) ส่งสถานะเก่า TIMED มาทับนัดที่จบแล้ว และ (ข) ส่ง "ผลหลอน"
+      -- FINISHED+สกอร์ของนัดที่ยังไม่เตะออกมาก่อน แล้วค่อยแก้กลับเป็น TIMED ทีหลัง
+      -- (เกิดจริงบน prod: MD2 โดนตัดแต้มล่วงหน้า 4 นัด แถม /standings ของเขาค้างผลหลอนต่อ)
+      -- กติกาที่รับมือได้ทั้งคู่: นัดที่จบแล้วมีสกอร์ครบ จะถูกดาวน์เกรดเป็นยังไม่จบได้
+      -- "เฉพาะเมื่อข้อมูลใหม่บอกว่าเวลาเตะอยู่ในอนาคต" (นัดที่ยังไม่ถึงเวลาเตะย่อมจบไม่ได้ —
+      -- นี่คือการแก้ผลหลอนกลับ ต้องยอม) ส่วนนัดที่เวลาเตะผ่านไปแล้ว ตรึงผลเดิมไว้กันข้อมูลเก่าทับ
+      -- ผลจบ→ผลจบใหม่ (แก้สกอร์ย้อนหลัง) ยังทับได้ปกติ / dev ที่ใช้ test-simulate-finish
+      -- ล้างด้วย db:reset-play เอง
       kickoff_at = case
         when matches.status = 'FINISHED'
           and matches.home_score is not null and matches.away_score is not null
           and (excluded.status <> 'FINISHED'
             or excluded.home_score is null or excluded.away_score is null)
+          and excluded.kickoff_at <= now()
         then matches.kickoff_at else excluded.kickoff_at
       end,
       status = case
@@ -72,6 +75,7 @@ export async function upsertMatch(
           and matches.home_score is not null and matches.away_score is not null
           and (excluded.status <> 'FINISHED'
             or excluded.home_score is null or excluded.away_score is null)
+          and excluded.kickoff_at <= now()
         then matches.status else excluded.status
       end,
       home_score = case
@@ -79,6 +83,7 @@ export async function upsertMatch(
           and matches.home_score is not null and matches.away_score is not null
           and (excluded.status <> 'FINISHED'
             or excluded.home_score is null or excluded.away_score is null)
+          and excluded.kickoff_at <= now()
         then matches.home_score else excluded.home_score
       end,
       away_score = case
@@ -86,6 +91,7 @@ export async function upsertMatch(
           and matches.home_score is not null and matches.away_score is not null
           and (excluded.status <> 'FINISHED'
             or excluded.home_score is null or excluded.away_score is null)
+          and excluded.kickoff_at <= now()
         then matches.away_score else excluded.away_score
       end,
       result_version = case
@@ -93,6 +99,7 @@ export async function upsertMatch(
           and matches.home_score is not null and matches.away_score is not null
           and (excluded.status <> 'FINISHED'
             or excluded.home_score is null or excluded.away_score is null)
+          and excluded.kickoff_at <= now()
         then matches.result_version
         when matches.status is distinct from excluded.status
           or matches.home_score is distinct from excluded.home_score

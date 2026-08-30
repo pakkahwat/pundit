@@ -1,12 +1,17 @@
 import { sqlClient } from '@/db/client';
-import { fdFetch } from '@/lib/jobs/sync-results';
 
-import { cachedFetchJson } from './cache';
+import { competitionLabel } from './competitions';
 
-// ตารางคะแนนอย่างเป็นทางการจาก football-data.org — ไม่ได้คำนวณเองจากตาราง matches ในระบบเรา
-// เพราะตารางจริงมีกฎที่เราไม่ได้เก็บข้อมูลไว้ เช่นการหักแต้ม (ที่เกิดขึ้นจริงหลายครั้งในพรีเมียร์ลีก
-// ช่วงหลัง) และเกณฑ์ตัดสินอันดับเมื่อแต้มเท่ากันซึ่งต่างกันไปตามลีก ถ้าคำนวณเองมีโอกาสไม่ตรงกับ
-// ที่คนดูเห็นจากที่อื่น ซึ่งแย่กว่าไม่มีตารางเลย
+// ตารางคะแนน "คำนวณเองจากตาราง matches ในระบบ" — เดิมใช้ endpoint /standings ของ
+// football-data.org เพราะกลัวพลาดกฎพิเศษ (หักแต้ม, เกณฑ์ตัดสินอันดับเฉพาะลีก) แต่ของจริง
+// ที่เจอบน prod แย่กว่านั้น: แผนฟรีเสิร์ฟ "ผลหลอน" — /standings นับผลของนัดที่ยังไม่เตะ
+// ไปแล้ว (Hull แข่ง 2 ทั้งที่นัดสองคิกออฟบ่ายวันนั้น) ขณะที่ /matches ถูกต้อง ทำให้ช่อง
+// แข่ง/แต้มขัดแย้งกับฟอร์ม 5 นัดหลังและแต้มผู้ทายที่คิดจาก DB ของเราเอง
+//
+// คำนวณเองจึงชนะทุกทาง: ทุกตัวเลขบนเว็บมาจากแหล่งเดียว (ตาราง matches ที่ผ่านการ์ด
+// กันข้อมูลหลอนแล้ว — ดู upsertMatch) สอดคล้องกันเสมอ และประหยัด API ไป 1 request/ลีก
+// แลกกับการไม่เห็นการหักแต้มอย่างเป็นทางการ ซึ่งยอมได้เพราะแต้มผู้เล่นของเราก็ไม่รู้จัก
+// การหักแต้มอยู่แล้ว — อย่างน้อยเว็บทั้งเว็บเล่าเรื่องเดียวกัน
 export type StandingRow = {
   position: number;
   team: { id: number; name: string; shortName: string; tla: string; crest: string };
@@ -21,21 +26,7 @@ export type StandingRow = {
   goalDifference: number;
 };
 
-type StandingsResponse = {
-  competition: { name: string; code: string };
-  season: { currentMatchday: number | null };
-  standings: { type: string; table: StandingRow[] }[];
-};
-
-// 30 นาที — ตารางคะแนนเปลี่ยนเฉพาะตอนมีนัดจบ ซึ่งเกิดไม่กี่ครั้งต่อสัปดาห์ ตั้งสั้นกว่านี้ก็เปลือง
-// โควตา API เปล่า ๆ ตั้งยาวกว่านี้คนจะบ่นว่าตารางไม่อัปเดตหลังบอลจบ
-const TTL_SECONDS = 30 * 60;
-
-// คำนวณฟอร์ม 5 นัดหลังสุดเองจากตาราง matches ในระบบ
-//
-// ทำไมต้องคำนวณเอง: football-data.org ส่งฟิลด์ form มาเป็น null ในแผนฟรี (เป็นฟีเจอร์ของแผนเสียเงิน)
-// แต่เรา sync ผลแข่งทุกนัดเข้า DB อยู่แล้ว จึงคำนวณได้เองฟรี ๆ และตรงกับข้อมูลที่เราใช้คิดคะแนน
-// ให้ผู้เล่นด้วย — ถ้าลีกไหนยังไม่ได้ sync เข้า DB ก็จะคืน map ว่าง แล้วช่องนั้นแสดง "—" ตามเดิม
+// คำนวณฟอร์ม 5 นัดหลังสุดจากตาราง matches (แหล่งเดียวกับตารางคะแนนข้างล่าง)
 async function getRecentFormByExternalTeamId(code: string): Promise<Map<number, string>> {
   const rows = await sqlClient<{ external_id: number; form: string }[]>`
     with season as (
@@ -74,29 +65,106 @@ async function getRecentFormByExternalTeamId(code: string): Promise<Map<number, 
 }
 
 export async function getStandings(code: string) {
-  const { data, stale, fetchedAt } = await cachedFetchJson<StandingsResponse>(
-    sqlClient,
-    // ใส่รหัสลีกใน cache key ไม่งั้นตารางของลาลีกาจะไปทับของพรีเมียร์ลีก
-    `standings:${code}`,
-    TTL_SECONDS,
-    () => fdFetch<StandingsResponse>(`/competitions/${code}/standings`),
-  );
+  const rows = await sqlClient<
+    {
+      external_id: number; name: string; short_name: string | null; tla: string | null;
+      crest_url: string | null; played: number; won: number; draw: number; lost: number;
+      gf: number; ga: number; points: number; current_matchday: number | null;
+    }[]
+  >`
+    with season as (
+      select id, current_matchday from seasons
+      where competition_code = ${code} and is_active = true limit 1
+    ),
+    -- นับเฉพาะนัดที่จบและมีสกอร์ครบ (เกณฑ์เดียวกับที่ใช้ตัดแต้มผู้ทายใน score job)
+    played as (
+      select m.home_team_id as team_id,
+        case
+          when m.home_score > m.away_score then 'W'
+          when m.home_score = m.away_score then 'D'
+          else 'L'
+        end as result,
+        m.home_score as gf, m.away_score as ga
+      from matches m
+      where m.season_id = (select id from season) and m.status = 'FINISHED'
+        and m.home_score is not null and m.away_score is not null
+      union all
+      select m.away_team_id,
+        case
+          when m.away_score > m.home_score then 'W'
+          when m.away_score = m.home_score then 'D'
+          else 'L'
+        end,
+        m.away_score, m.home_score
+      from matches m
+      where m.season_id = (select id from season) and m.status = 'FINISHED'
+        and m.home_score is not null and m.away_score is not null
+    ),
+    -- ทีมทั้งหมดของฤดูกาล (รวมทีมที่ยังไม่เตะสักนัด — ต้องโผล่ในตารางด้วยค่า 0)
+    season_teams as (
+      select distinct team_id from (
+        select home_team_id as team_id from matches where season_id = (select id from season)
+        union all
+        select away_team_id from matches where season_id = (select id from season)
+      ) x
+    )
+    select
+      t.external_id, t.name, t.short_name, t.tla, t.crest_url,
+      count(p.result)::int as played,
+      (count(*) filter (where p.result = 'W'))::int as won,
+      (count(*) filter (where p.result = 'D'))::int as draw,
+      (count(*) filter (where p.result = 'L'))::int as lost,
+      coalesce(sum(p.gf), 0)::int as gf,
+      coalesce(sum(p.ga), 0)::int as ga,
+      ((count(*) filter (where p.result = 'W')) * 3
+        + (count(*) filter (where p.result = 'D')))::int as points,
+      (select current_matchday from season) as current_matchday
+    from season_teams st
+    join teams t on t.id = st.team_id
+    left join played p on p.team_id = st.team_id
+    group by t.external_id, t.name, t.short_name, t.tla, t.crest_url
+    order by points desc, (coalesce(sum(p.gf), 0) - coalesce(sum(p.ga), 0)) desc,
+      coalesce(sum(p.gf), 0) desc, t.name asc
+  `;
 
-  // ตอบกลับมาหลายชุด (TOTAL / HOME / AWAY) — เอาเฉพาะตารางรวมซึ่งคือตารางคะแนนที่คนทั่วไปเข้าใจ
-  const rawTable = data.standings.find((s) => s.type === 'TOTAL')?.table ?? [];
-
-  // เติมฟอร์มที่คำนวณเองเข้าไปเมื่อ API ไม่ได้ส่งมา (แผนฟรีส่ง null เสมอ)
   const formByTeam = await getRecentFormByExternalTeamId(code);
-  const table = rawTable.map((r) => ({
-    ...r,
-    form: r.form ?? formByTeam.get(r.team.id) ?? null,
-  }));
+
+  // อันดับแบบเดียวกับตารางจริง: เสมอกันทุกเกณฑ์ (แต้ม/ได้เสีย/ประตูได้) = อันดับร่วม
+  let position = 0;
+  let prevKey = '';
+  const table: StandingRow[] = rows.map((r, index) => {
+    const key = `${r.points}|${r.gf - r.ga}|${r.gf}`;
+    if (key !== prevKey) {
+      position = index + 1;
+      prevKey = key;
+    }
+    return {
+      position,
+      team: {
+        id: r.external_id,
+        name: r.name,
+        shortName: r.short_name ?? r.name,
+        tla: r.tla ?? '',
+        crest: r.crest_url ?? '',
+      },
+      playedGames: r.played,
+      form: formByTeam.get(r.external_id) ?? null,
+      won: r.won,
+      draw: r.draw,
+      lost: r.lost,
+      points: r.points,
+      goalsFor: r.gf,
+      goalsAgainst: r.ga,
+      goalDifference: r.gf - r.ga,
+    };
+  });
 
   return {
     table,
-    competitionName: data.competition?.name ?? code,
-    currentMatchday: data.season?.currentMatchday ?? null,
-    stale,
-    fetchedAt,
+    competitionName: competitionLabel(code, code),
+    currentMatchday: rows[0]?.current_matchday ?? null,
+    // คำนวณสดจาก DB ทุกครั้ง ไม่มี cache ให้ค้าง — สองฟิลด์นี้คงไว้ให้หน้าเดิมใช้ต่อได้เฉย ๆ
+    stale: false,
+    fetchedAt: new Date(),
   };
 }
