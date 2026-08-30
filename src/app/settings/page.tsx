@@ -20,7 +20,7 @@ import {
 } from "@/components/ui";
 import { db } from "@/db/client";
 import { withUserContext } from "@/db/rls";
-import { leagueMembers, leagues, userBadges, users } from "@/db/schema";
+import { leagueMembers, leagues, users } from "@/db/schema";
 import { competitionByCode } from "@/lib/football/competitions";
 import { BADGES, isBadgeKey } from "@/lib/stats/badges";
 
@@ -50,11 +50,29 @@ export default async function SettingsPage(props: {
       name: users.name,
       displayName: users.displayName,
       email: users.email,
-      bestStreak: users.bestStreak,
     })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
+
+  // สตรีค/เหรียญอยู่หลัง migration (users.best_streak, ตาราง user_badges) — ครอบ try ไว้
+  // เพื่อให้หน้านี้ "เสื่อมอย่างสุภาพ" ตอน deploy โค้ดไปก่อนรัน migrate: โชว์ทุกอย่างที่โชว์ได้
+  // โดยไม่มีเหรียญ ดีกว่า 500 ทั้งหน้า (เกิดจริงบน prod มาแล้ว — โค้ดถึงก่อน migration ถึง)
+  let bestStreak = 0;
+  let badgeKeys: string[] = [];
+  try {
+    const [streakRow] = await db.execute<{ best_streak: number }>(
+      sqlTag`select best_streak from users where id = ${userId}::uuid`,
+    );
+    bestStreak = streakRow?.best_streak ?? 0;
+    const badgeRows = await db.execute<{ badge_key: string }>(
+      sqlTag`select badge_key from user_badges
+        where user_id = ${userId}::uuid order by earned_at`,
+    );
+    badgeKeys = badgeRows.map((row) => row.badge_key);
+  } catch {
+    // migration ยังไม่ลงฐานนี้ — ปล่อยค่า default แล้วไปต่อ
+  }
 
   const myLeagues = await db
     .select({ id: leagues.id, name: leagues.name, seasonId: leagues.seasonId })
@@ -115,13 +133,7 @@ export default async function SettingsPage(props: {
       )
     : [];
 
-  const myBadges = await db
-    .select({ badgeKey: userBadges.badgeKey })
-    .from(userBadges)
-    .where(eq(userBadges.userId, userId))
-    .orderBy(userBadges.earnedAt);
-  const badges = myBadges
-    .map((row) => row.badgeKey)
+  const badges = badgeKeys
     .filter(isBadgeKey)
     .map((key) => ({ key, ...BADGES[key] }));
 
@@ -190,9 +202,7 @@ export default async function SettingsPage(props: {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <StatCard
             label="สตรีคสูงสุด"
-            value={
-              (me?.bestStreak ?? 0) > 0 ? `${me!.bestStreak} นัดติด` : "—"
-            }
+            value={bestStreak > 0 ? `${bestStreak} นัดติด` : "—"}
           />
           <StatCard label="ทายไปแล้ว" value={`${rows.length} นัด`} />
           <StatCard
