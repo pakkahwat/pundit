@@ -22,7 +22,7 @@ import { db } from "@/db/client";
 import { withUserContext } from "@/db/rls";
 import { leagueMembers, leagues, users } from "@/db/schema";
 import { competitionByCode } from "@/lib/football/competitions";
-import { BADGES, isBadgeKey } from "@/lib/stats/badges";
+import { BADGES, computeStreaks, isBadgeKey } from "@/lib/stats/badges";
 
 import { DisplayNameForm } from "./display-name-form";
 
@@ -149,6 +149,16 @@ export default async function SettingsPage(props: {
   const correct = finished.filter(
     (row) => actualOutcomeOf(row) === row.predicted,
   );
+  // สตรีคบนการ์ด: โหมดกรองลีก = คิดสดจากนัดที่จบของลีกนั้น (เรียง desc อยู่ ต้อง reverse
+  // ให้เป็นเก่า→ใหม่ก่อน ไม่งั้นสตรีคนับถอยหลัง) / โหมดทั้งหมด = ค่าสูงสุดตลอดกาลบนโปรไฟล์
+  const bestStreakShown = selectedLeague
+    ? computeStreaks(
+        [...finished]
+          .reverse()
+          .map((row) => ({ correct: actualOutcomeOf(row) === row.predicted })),
+      ).best
+    : bestStreak;
+
   const totalPoints = rows.reduce(
     (sum, row) => sum + (row.pointsAwarded ?? 0),
     0,
@@ -220,8 +230,8 @@ export default async function SettingsPage(props: {
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <StatCard
-            label="สตรีคสูงสุด"
-            value={bestStreak > 0 ? `${bestStreak} นัดติด` : "—"}
+            label={selectedLeague ? "สตรีคสูงสุดในลีกนี้" : "สตรีคสูงสุด (ทุกลีก)"}
+            value={bestStreakShown > 0 ? `${bestStreakShown} นัดติด` : "—"}
           />
           <StatCard label="ทายไปแล้ว" value={`${rows.length} นัด`} />
           <StatCard

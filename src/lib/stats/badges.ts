@@ -161,7 +161,7 @@ export type ScoredRow = {
   againstMajority: boolean;
 };
 
-export function computeStreaks(rows: ScoredRow[]): {
+export function computeStreaks(rows: Pick<ScoredRow, "correct">[]): {
   current: number;
   best: number;
 } {
