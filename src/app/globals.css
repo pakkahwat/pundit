@@ -1,5 +1,15 @@
 @import "tailwindcss";
 
+/* Tailwind v4 เปลี่ยน default ของปุ่มเป็น cursor: default (ตาม spec เบราว์เซอร์) —
+   แต่ผู้ใช้ทั่วไปคาดหวังรูปมือบนทุกอย่างที่กดได้ คืนพฤติกรรมเดิมให้ทั้งแอปที่เดียวตรงนี้
+   แทนการไล่ใส่ cursor-pointer ทีละปุ่มแล้วหลุดเป็นจุด ๆ (เจอมาแล้วกับปุ่มโปรไฟล์) */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+}
+
 /* Design token ของทั้งแอป — ทุกหน้าอ้างสีผ่านชื่อเชิงความหมาย (surface, muted, accent) ไม่ใช่
    ชื่อสีดิบ ๆ อย่าง zinc-500 เพื่อให้เปลี่ยนธีมทีเดียวได้ทั้งแอปโดยไม่ต้องไล่แก้ทุกไฟล์
    accent เป็นเขียวสนาม (pitch green) ให้เข้ากับธีมฟุตบอล */

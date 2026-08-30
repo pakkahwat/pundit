@@ -34,6 +34,7 @@
     "db:migrate-notifications": "tsx scripts/migrate-notifications.ts",
     "db:migrate-ai-reasoning": "tsx scripts/migrate-ai-reasoning.ts",
     "db:migrate-profile-badges": "tsx scripts/migrate-profile-badges.ts",
+    "db:backfill-badges": "tsx scripts/backfill-badges.ts",
     "db:test-llm": "tsx scripts/test-llm.ts",
     "db:list-models": "tsx scripts/list-models.ts",
     "db:remove-ai-agent": "tsx scripts/remove-ai-agent.ts",

@@ -14,6 +14,7 @@ import {
   SectionLabel,
 } from "@/components/ui";
 import { db } from "@/db/client";
+import { BadgeChip } from "@/components/profile-name";
 import { withUserContext } from "@/db/rls";
 import {
   leagueMembers,
@@ -22,7 +23,10 @@ import {
   predictionScores,
   predictions,
   teams,
+  userBadges,
+  users,
 } from "@/db/schema";
+import { BADGES, isBadgeKey } from "@/lib/stats/badges";
 import { formatKickoff } from "@/lib/match-time";
 import { pendingPredictionCount } from "@/lib/leagues/pending";
 import { getCurrentMatchday } from "@/lib/matches/current-matchday";
@@ -139,6 +143,25 @@ export default async function MyPredictionsPage({
       .orderBy(desc(matches.matchday), matches.kickoffAt),
   );
 
+  // สตรีคสูงสุด (สถิติถาวร) + เหรียญที่เก็บไว้บนโปรไฟล์ — โชว์ตรงนี้เลยไม่ต้องกดอะไร
+  // เพราะหน้านี้คือที่แรกที่คนมาดูสถิติตัวเอง (การ์ดโปรไฟล์มีไว้ดู "คนอื่น" เป็นหลัก)
+  const [[me], myBadges] = await Promise.all([
+    db
+      .select({ bestStreak: users.bestStreak })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1),
+    db
+      .select({ badgeKey: userBadges.badgeKey })
+      .from(userBadges)
+      .where(eq(userBadges.userId, userId))
+      .orderBy(userBadges.earnedAt),
+  ]);
+  const badges = myBadges
+    .map((row) => row.badgeKey)
+    .filter(isBadgeKey)
+    .map((key) => ({ key, ...BADGES[key] }));
+
   // สรุปหัวหน้า — นับเฉพาะนัดที่จบและคิดคะแนนได้จริง ความแม่นจึงตรงกับหน้าอันดับเสมอ
   const finished = rows.filter((row) => actualOutcomeOf(row) !== null);
   const correct = finished.filter(
@@ -171,7 +194,13 @@ export default async function MyPredictionsPage({
         </EmptyState>
       ) : (
         <>
-          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            <StatCard
+              label="สตรีคสูงสุด"
+              value={
+                (me?.bestStreak ?? 0) > 0 ? `${me!.bestStreak} นัดติด` : "—"
+              }
+            />
             <StatCard label="ทายไปแล้ว" value={`${rows.length} นัด`} />
             <StatCard
               label="ทายถูก"
@@ -186,6 +215,28 @@ export default async function MyPredictionsPage({
               }
             />
             <StatCard label="แต้มรวมในลีกนี้" value={`${totalPoints} แต้ม`} />
+          </div>
+
+          <div className="mb-6">
+            <SectionLabel>เหรียญตราของฉัน ({badges.length}/21)</SectionLabel>
+            {badges.length === 0 ? (
+              <p className="text-xs text-muted">
+                ยังไม่มีเหรียญ — เหรียญแรก ⚽ &quot;ประเดิมสนาม&quot;
+                มาทันทีที่คำทายนัดแรกออกผล
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {badges.map((badge) => (
+                  <BadgeChip
+                    key={badge.key}
+                    badgeKey={badge.key}
+                    label={badge.label}
+                    description={badge.description}
+                    emoji={badge.emoji}
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col gap-6">

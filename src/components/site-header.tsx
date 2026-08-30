@@ -5,6 +5,7 @@ import { auth, signOut } from "@/auth";
 import { db } from "@/db/client";
 import { users } from "@/db/schema";
 import { displayNameSql } from "@/lib/display-name";
+import { isAdminEmail } from "@/lib/admin";
 
 import { Logo } from "./logo";
 import { NavLink } from "./nav-link";
@@ -33,6 +34,7 @@ async function currentDisplayName(userId: string) {
 export async function SiteHeader() {
   const session = await auth();
   const signedIn = Boolean(session?.user?.id);
+  const admin = isAdminEmail(session?.user?.email);
 
   return (
     <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur">
@@ -57,6 +59,7 @@ export async function SiteHeader() {
               <NavLink href="/standings">ตารางคะแนน</NavLink>
               <NavLink href="/fixtures">โปรแกรมแข่ง</NavLink>
               <NavLink href="/news">คอลัมน์</NavLink>
+              {admin && <NavLink href="/admin">ระบบ</NavLink>}
             </nav>
           )}
 
@@ -95,6 +98,7 @@ export async function SiteHeader() {
             <NavLink href="/standings">ตารางคะแนน</NavLink>
             <NavLink href="/fixtures">โปรแกรมแข่ง</NavLink>
             <NavLink href="/news">คอลัมน์</NavLink>
+            {admin && <NavLink href="/admin">ระบบ</NavLink>}
           </nav>
         )}
       </div>

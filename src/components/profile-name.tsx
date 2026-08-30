@@ -77,9 +77,11 @@ export function ProfileName({
 
   return (
     <>
+      {/* เส้นประใต้ชื่อแสดงตลอด ไม่ใช่รอ hover — บนมือถือไม่มี hover ถ้าไม่มีร่องรอยอะไรเลย
+        ไม่มีใครรู้ว่ากดชื่อได้ (บั๊กจริง: ฟีเจอร์ deploy แล้วแต่ผู้ใช้หาไม่เจอ) */}
       <button
         onClick={openCard}
-        className={`min-w-0 break-words text-left underline-offset-2 hover:text-foreground hover:underline ${className}`}
+        className={`min-w-0 cursor-pointer break-words text-left underline decoration-border decoration-dotted underline-offset-4 transition-colors hover:text-foreground hover:decoration-accent ${className}`}
       >
         {name}
       </button>
@@ -190,13 +192,13 @@ export function ProfileName({
                 ) : (
                   <ul className="flex flex-wrap gap-2">
                     {data.badges.map((badge) => (
-                      <li
-                        key={badge.key}
-                        title={badge.description}
-                        className="flex cursor-help items-center gap-1.5 rounded-full border border-border bg-surface-hover px-2.5 py-1 text-xs"
-                      >
-                        <BadgeIcon badgeKey={badge.key} emoji={badge.emoji} />
-                        {badge.label}
+                      <li key={badge.key}>
+                        <BadgeChip
+                          badgeKey={badge.key}
+                          label={badge.label}
+                          description={badge.description}
+                          emoji={badge.emoji}
+                        />
                       </li>
                     ))}
                   </ul>
@@ -207,6 +209,29 @@ export function ProfileName({
         </div>
       </dialog>
     </>
+  );
+}
+
+/** ชิปเหรียญหนึ่งใบ — ใช้ทั้งในการ์ดโปรไฟล์และหน้า "คำทายของฉัน" */
+export function BadgeChip({
+  badgeKey,
+  label,
+  description,
+  emoji,
+}: {
+  badgeKey: string;
+  label: string;
+  description: string;
+  emoji: string;
+}) {
+  return (
+    <span
+      title={description}
+      className="flex cursor-help items-center gap-1.5 rounded-full border border-border bg-surface-hover px-2.5 py-1 text-xs"
+    >
+      <BadgeIcon badgeKey={badgeKey} emoji={emoji} />
+      {label}
+    </span>
   );
 }
 

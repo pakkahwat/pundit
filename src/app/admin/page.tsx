@@ -11,6 +11,7 @@ import {
 } from "@/components/ui";
 import { sqlClient } from "@/db/client";
 import { hasApiKey } from "@/lib/ai/llm";
+import { isAdminEmail } from "@/lib/admin";
 
 // ── หน้าสุขภาพระบบ (/admin) ─────────────────────────────────────────────────────
 //
@@ -23,15 +24,6 @@ import { hasApiKey } from "@/lib/ai/llm";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "สุขภาพระบบ · Pundit" };
-
-function isAdmin(email: string | null | undefined): boolean {
-  if (!email) return false;
-  const allowed = (process.env.ADMIN_EMAILS ?? "")
-    .split(",")
-    .map((entry) => entry.trim().toLowerCase())
-    .filter(Boolean);
-  return allowed.includes(email.toLowerCase());
-}
 
 // เดาสาเหตุจากข้อความ error ล่าสุด — ตอบคำถาม "token หมด/ผิดหรือเปล่า" โดยไม่ต้องยิงทดสอบ
 // (การยิงทดสอบจริงเปลืองโควตา LLM และหน้า admin ถูกเปิดบ่อย)
@@ -58,7 +50,7 @@ function timeAgo(iso: string | null): string {
 export default async function AdminPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/");
-  if (!isAdmin(session.user.email)) redirect("/");
+  if (!isAdminEmail(session.user.email)) redirect("/");
 
   const [cronRuns, agents, articles] = await Promise.all([
     // รอบล่าสุดของแต่ละ job — distinct on คือท่าประจำของ "แถวล่าสุดต่อกลุ่ม" ใน Postgres
