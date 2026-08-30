@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { PlayerAvatar } from "./player-avatar";
-import type { ProfileBadge } from "@/lib/stats/profile";
+import type { ProfileBadge, ProfileWin } from "@/lib/stats/profile";
 
 // ── การ์ดโปรไฟล์ผู้ทาย: กดที่ชื่อแล้วเด้งขึ้นมา ─────────────────────────────────
 //
@@ -36,6 +36,7 @@ type ProfilePayload = {
     points: number;
     accuracy: number | null;
     recentForm: boolean[];
+    wins: ProfileWin[];
   };
   badges: ProfileBadge[];
 };
@@ -56,6 +57,7 @@ export function ProfileName({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<ProfilePayload | null>(null);
+  const [showWins, setShowWins] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -95,7 +97,10 @@ export function ProfileName({
 
       <dialog
         ref={dialogRef}
-        onClose={() => setOpen(false)}
+        onClose={() => {
+          setOpen(false);
+          setShowWins(false);
+        }}
         onClick={(e) => {
           if (e.target === dialogRef.current) setOpen(false);
         }}
@@ -152,11 +157,43 @@ export function ProfileName({
                   label="ทายถูก"
                   value={`${data.league.correct} จาก ${data.league.scored} นัด`}
                 />
-                <Stat label="แต้ม" value={`${data.league.points}`} />
+                {/* ช่องแต้มกดได้ — กางรายการนัดที่ทายถูกซึ่งประกอบกันเป็นแต้มก้อนนี้
+                  (เลขเฉย ๆ ตอบไม่ได้ว่า "มาจากนัดไหน" ซึ่งเป็นคำถามแรกที่ทุกคนถาม) */}
+                <Stat
+                  label="แต้ม"
+                  value={`${data.league.points}`}
+                  onClick={
+                    data.league.wins.length > 0
+                      ? () => setShowWins((v) => !v)
+                      : undefined
+                  }
+                  active={showWins}
+                />
               </div>
               <p className="-mt-2 text-center text-[11px] text-muted">
-                สถิติเฉพาะลีกนี้ · นับเฉพาะนัดที่จบแล้ว
+                {data.league.wins.length > 0
+                  ? "สถิติเฉพาะลีกนี้ · กดช่องแต้มเพื่อดูนัดที่ทายถูก"
+                  : "สถิติเฉพาะลีกนี้ · นับเฉพาะนัดที่จบแล้ว"}
               </p>
+
+              {showWins && (
+                <ul className="flex max-h-56 flex-col gap-1.5 overflow-y-auto rounded-lg bg-surface-hover p-2">
+                  {data.league.wins.map((win, index) => (
+                    <li
+                      key={`${win.kickoffAt}-${index}`}
+                      className="flex items-center justify-between gap-2 text-xs"
+                    >
+                      <span className="min-w-0 break-words">
+                        <span className="text-muted">MD{win.matchday} · </span>
+                        {win.home} {win.homeScore}-{win.awayScore} {win.away}
+                      </span>
+                      <span className="shrink-0 font-semibold text-success">
+                        +{win.points}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
 
               {/* แถบโปรไฟล์รวม — สตรีคสูงสุดเป็นสมบัติประจำตัวข้ามลีก ไม่รีเซ็ตตามลีก */}
               <div className="flex items-center justify-between gap-2 rounded-lg bg-surface-hover px-3 py-2 text-xs">
@@ -244,12 +281,39 @@ export function BadgeChip({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-border px-2 py-2.5">
+function Stat({
+  label,
+  value,
+  onClick,
+  active = false,
+}: {
+  label: string;
+  value: string;
+  onClick?: () => void;
+  active?: boolean;
+}) {
+  const body = (
+    <>
       <p className="font-display text-base font-semibold">{value}</p>
       <p className="mt-0.5 text-[11px] text-muted">{label}</p>
-    </div>
+    </>
+  );
+  // ไม่มี onClick = กล่องเฉย ๆ ห้ามเป็น <button> เปล่า ๆ เพราะ screen reader จะประกาศว่า
+  // "กดได้" ทั้งที่กดแล้วไม่เกิดอะไร
+  if (!onClick) {
+    return <div className="rounded-lg border border-border px-2 py-2.5">{body}</div>;
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-expanded={active}
+      className={`cursor-pointer rounded-lg border px-2 py-2.5 text-center transition-colors hover:border-accent ${
+        active ? "border-accent bg-accent/10" : "border-border"
+      }`}
+    >
+      {body}
+    </button>
   );
 }
 

@@ -29,6 +29,16 @@ export type ProfileBadge = {
   earnedAt: string;
 };
 
+export type ProfileWin = {
+  matchday: number;
+  home: string;
+  away: string;
+  homeScore: number;
+  awayScore: number;
+  points: number;
+  kickoffAt: string;
+};
+
 export type LeagueProfile = {
   /** สถิติรวมทุกลีก (คำทายเป็นของกลาง คิดจากประวัติทั้งหมดของคนนั้น) */
   overall: {
@@ -48,6 +58,8 @@ export type LeagueProfile = {
     accuracy: number | null;
     /** ผล 5 นัดจบล่าสุด "เฉพาะฤดูกาลของลีกนี้" เรียงเก่า→ใหม่ */
     recentForm: boolean[];
+    /** นัดที่ทายถูกในลีกนี้ (ใหม่→เก่า) — กางดูได้จากการกดช่องแต้มบนการ์ด */
+    wins: ProfileWin[];
   };
   badges: ProfileBadge[];
 };
@@ -176,7 +188,7 @@ export async function getLeagueProfile(
     beatsBestAi: await beatsBestAi(sql, userId, finished, correct),
   });
 
-  const [[{ predicted }], [leagueStats], [me]] = await Promise.all([
+  const [[{ predicted }], [leagueStats], [me], winRows] = await Promise.all([
     sql<{ predicted: number }[]>`
       select count(*)::int as predicted from predictions
       where user_id = ${userId}::uuid
@@ -191,6 +203,29 @@ export async function getLeagueProfile(
     `,
     sql<{ best_streak: number }[]>`
       select best_streak from users where id = ${userId}::uuid
+    `,
+    // รายการนัดที่ทายถูกในลีกนี้ — ยึด points_awarded > 0 ให้ตรงกับเลขแต้มบนการ์ดเป๊ะ
+    // (ไม่คำนวณถูก/ผิดใหม่จากสกอร์ ไม่งั้นถ้ากติกาให้แต้มเปลี่ยน รายการกับตัวเลขจะเพี้ยนกัน)
+    sql<
+      {
+        matchday: number; home: string; away: string;
+        home_score: number; away_score: number; points: number; kickoff_at: string;
+      }[]
+    >`
+      select m.matchday,
+        coalesce(ht.short_name, ht.name) as home,
+        coalesce(at.short_name, at.name) as away,
+        m.home_score, m.away_score,
+        ps.points_awarded as points, m.kickoff_at::text as kickoff_at
+      from prediction_scores ps
+      join predictions p on p.id = ps.prediction_id
+      join matches m on m.id = p.match_id
+      join teams ht on ht.id = m.home_team_id
+      join teams at on at.id = m.away_team_id
+      where ps.league_id = ${leagueId}::uuid
+        and p.user_id = ${userId}::uuid
+        and ps.points_awarded > 0
+      order by m.kickoff_at desc
     `,
   ]);
 
@@ -234,6 +269,15 @@ export async function getLeagueProfile(
           ? (leagueStats!.correct ?? 0) / leagueStats!.scored
           : null,
       recentForm: leagueRows.slice(-5).map((row) => row.correct),
+      wins: winRows.map((row) => ({
+        matchday: row.matchday,
+        home: row.home,
+        away: row.away,
+        homeScore: row.home_score,
+        awayScore: row.away_score,
+        points: row.points,
+        kickoffAt: row.kickoff_at,
+      })),
     },
     badges: badgeRows
       .filter((row) => isBadgeKey(row.badge_key))
