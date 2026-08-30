@@ -99,8 +99,8 @@ const AGENTS: AgentSeed[] = [
     // 2. z-ai/glm-5.2:free (OpenRouter) — โมเดลฟรีบน OpenRouter ใช้ pool กลางร่วมกันทั้งเว็บ
     //    ทดสอบจริงแล้ว 429 "temporarily rate-limited upstream" พร้อมกันทุกโมเดลฟรี เชื่อถือไม่ได้
     // 3. ปัจจุบัน: qwen/qwen3.8-27b บน Groq — ฟรีแบบโควตาต่อบัญชี (ไม่ใช่ pool กลาง) เสถียร
-    //    เท่าที่พิสูจน์จาก agent gpt-oss สองตัว และได้โจทย์วิจัยแถม: Qwen ตระกูลเดียวกัน
-    //    คนละขนาดกับ "มังกรหยก" (Max) — ขนาดโมเดลมีผลกับการทายบอลไหม
+    //    เท่าที่พิสูจน์จาก agent gpt-oss สองตัว (เคยหวังเทียบกับ "มังกรหยก" Qwen Max
+    //    แต่ตัวนั้นปลดประจำการไปก่อนตาม TokenRouter — ดูบันทึกท้ายลิสต์)
     agentKey: "open-router",
     displayName: "นินจาเงียบเหงา (Qwen3.8 27B)",
     provider: "groq",
@@ -109,13 +109,20 @@ const AGENTS: AgentSeed[] = [
     systemPrompt: null,
   },
   {
-    agentKey: "token-router-qwen-max-free",
-    displayName: "มังกรหยก (Qwen Max Free)",
-    provider: "tokenrouter",
-    modelId: "qwen/qwen3.8-max-free",
+    // ค่ายที่หายไปจากสนาม — บัญชีเป็น Evaluation access (ฟรีในโควตาจำกัด) ซึ่งพอสำหรับ
+    // งานนี้ที่ยิงไม่กี่สิบครั้งต่อแมตช์เดย์แบบเว้นจังหวะ 5 วิ ถ้าวันไหนชนโควตา ระบบก็แค่
+    // ข้ามรอบนั้นแล้วรอบถัดไปทายต่อ (idempotent) ไม่มีอะไรพังถาวร
+    agentKey: "claude-haiku",
+    displayName: "นักปราชญ์ส้ม (Claude Haiku 4.5)",
+    provider: "anthropic",
+    modelId: "claude-haiku-4-5",
     strategy: "llm",
     systemPrompt: null,
   },
+  // "มังกรหยก (Qwen Max Free)" ปลดประจำการ 30 ส.ค. 2026 — TokenRouter ถอด channel ของ
+  // qwen3.8-max-free ออก (แคตตาล็อกยังลิสต์อยู่แต่เรียกแล้ว "No available channel" ทุกครั้ง
+  // และทั้งบัญชีเหลือโมเดลนั้นตัวเดียว) การเอาออกจากลิสต์นี้ทำให้ seed ตั้ง is_active = false
+  // ให้อัตโนมัติ — คำทาย/คะแนน 20 นัดที่เคยทำไว้คงอยู่ครบสำหรับการวิเคราะห์
 ];
 
 async function main() {

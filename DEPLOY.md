@@ -46,9 +46,9 @@ Remove-Item Env:DATABASE_URL    # อย่าลืมล้างค่า ไ
 | `FOOTBALL_DATA_API_TOKEN`      | token เดิมจาก football-data.org                                                          |
 | `GOOGLE_GENERATIVE_AI_API_KEY` | API key จาก Google AI Studio                                                             |
 | `OPENROUTER_API_KEY`           | API key จาก OpenRouter สำหรับ `stealth/ox-alpha`                                         |
-| `TOKENROUTER_API_KEY`          | API key จาก TokenRouter สำหรับ `qwen/qwen3.8-max-free`                                   |
 | `GROQ_API_KEY`                 | API key จาก Groq สำหรับ `openai/gpt-oss-120b` และ `openai/gpt-oss-20b`                   |
 | `MISTRAL_API_KEY`              | API key จาก Mistral สำหรับ `mistral-small-latest`                                        |
+| `ANTHROPIC_API_KEY`            | API key จาก console.anthropic.com สำหรับ `claude-haiku` (Evaluation access ใช้ฟรีได้)     |
 | `SPORTMONKS_API_TOKEN`         | API token จาก SportMonks — ใช้ดึงสกอร์สดของพรีเมียร์ลีกบนหน้าแรก                          |
 | `PEXELS_API_KEY`               | API key จาก pexels.com/api — ภาพสำรองของหน้าปกบทความ (ฟรี 200 req/ชม.)                    |
 | `ADMIN_EMAILS`                 | อีเมลที่เข้าหน้า /admin ได้ คั่นด้วย , — ไม่ตั้ง = ไม่มีใครเข้าได้เลย                        |
@@ -77,9 +77,8 @@ npm run db:join-ai-agents-to-leagues
 Remove-Item Env:DATABASE_URL
 ```
 
-คำสั่ง seed จะสร้าง/เปิดใช้งาน `open-router` และ
-`token-router-qwen-max-free` ใน production ส่วนคำสั่ง join จะเพิ่มทั้งคู่เข้า league
-เดิมที่มีอยู่แล้ว
+คำสั่ง seed จะสร้าง/อัปเดตผู้เล่น AI ตามลิสต์ใน scripts/seed-ai-agents.ts (ตัวที่ถูกถอด
+จากลิสต์จะถูกปิดใช้งานอัตโนมัติ) ส่วนคำสั่ง join จะเพิ่มตัวใหม่เข้า league เดิมที่มีอยู่แล้ว
 
 ---
 

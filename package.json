@@ -43,6 +43,7 @@
     "db:test-simulate-finish": "tsx scripts/test-simulate-finish.ts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.45",
     "@ai-sdk/google": "^4.0.50",
     "@ai-sdk/groq": "^4.0.31",
     "@ai-sdk/mistral": "^4.0.33",

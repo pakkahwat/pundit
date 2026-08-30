@@ -1,3 +1,4 @@
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createGroq } from "@ai-sdk/groq";
 import { createMistral } from "@ai-sdk/mistral";
@@ -91,6 +92,12 @@ const PROVIDERS: Record<
   string,
   { envKey: string; build: (apiKey: string, modelId: string) => LanguageModel }
 > = {
+  // ใช้ provider ตรงของ AI SDK ไม่ใช่ OpenAI-compat endpoint — generateObject ต้องการ
+  // structured output ซึ่งฝั่ง Anthropic ทำผ่าน tool-mode ที่ provider ตรงจัดการให้เอง
+  anthropic: {
+    envKey: "ANTHROPIC_API_KEY",
+    build: (apiKey, modelId) => createAnthropic({ apiKey })(modelId),
+  },
   google: {
     envKey: "GOOGLE_GENERATIVE_AI_API_KEY",
     build: (apiKey, modelId) => createGoogleGenerativeAI({ apiKey })(modelId),
