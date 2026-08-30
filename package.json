@@ -40,7 +40,8 @@
     "db:remove-ai-agent": "tsx scripts/remove-ai-agent.ts",
     "db:season-status": "tsx scripts/season-status.ts",
     "db:test-sportmonks": "tsx scripts/test-sportmonks.ts",
-    "db:test-simulate-finish": "tsx scripts/test-simulate-finish.ts"
+    "db:test-simulate-finish": "tsx scripts/test-simulate-finish.ts",
+    "db:cleanup-stale-scores": "tsx scripts/cleanup-stale-scores.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.45",

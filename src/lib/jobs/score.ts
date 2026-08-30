@@ -14,6 +14,26 @@ import { awardBadgesForUsers } from '@/lib/stats/profile';
 // รองรับผลแก้ย้อนหลัง (requirement ข้อ 3): ถ้า sync เจอสกอร์เปลี่ยน result_version จะขยับ
 // ทำให้ WHERE ข้างบนเป็นจริงอีกครั้ง คะแนนถูกคำนวณใหม่อัตโนมัติโดยไม่ต้อง special-case อะไรเพิ่ม
 export async function runScorePredictions(sql: postgres.Sql) {
+  // เก็บกวาด "แต้มผี" ก่อนคิดคะแนนรอบใหม่: แมตช์ที่เคยถูกตัดคะแนนไปแล้ว แต่ภายหลัง
+  // ข้อมูลถอยกลับเป็น "ยังไม่จบ/ไม่มีสกอร์" (เจอจริงบน prod: football-data เคยส่งสถานะจบ
+  // มาแล้วกลับคำเป็น TIMED — นัดที่ยังไม่เตะ 5 นัดมีแต้มค้าง ทำให้แต้มรวม สตรีค และ
+  // ความแม่นบนหน้าเว็บขัดแย้งกันเอง) — insert ข้างล่างมองเฉพาะนัด FINISHED จึงไม่มีวัน
+  // แก้แถวพวกนี้ได้เอง ต้องลบทิ้งตรง ๆ แล้วถ้าวันหน้านัดนั้นจบจริงก็จะถูกคิดใหม่ตามปกติ
+  //
+  // ลบเฉพาะนัดที่ "ยังไม่ถึงเวลาเตะ" (kickoff อนาคต) เท่านั้น — นัดที่เตะไปแล้วแต่สถานะ
+  // ใน DB ค้างเป็นยังไม่จบ อาจเป็นแค่ sync ยังตามไม่ทัน แต้มที่ตัดไว้เป็นของแท้ ห้ามลบ
+  // (เจอจริง: football-data ส่งข้อมูลเก่าทับนัด MD2 ที่จบแล้ว ถ้าลบตามสถานะอย่างเดียว
+  // จะพาแต้มแท้หายไปด้วย) ปล่อยให้ sync คืนสภาพแล้วระบบ result_version คิดใหม่เอง
+  const stale = await sql<{ prediction_id: string }[]>`
+    delete from prediction_scores ps
+    using predictions p, matches m
+    where p.id = ps.prediction_id
+      and m.id = p.match_id
+      and (m.status <> 'FINISHED' or m.home_score is null or m.away_score is null)
+      and m.kickoff_at > now()
+    returning ps.prediction_id
+  `;
+
   const rows = await sql`
     insert into prediction_scores (league_id, prediction_id, points_awarded, scored_result_version)
     select
@@ -52,14 +72,18 @@ export async function runScorePredictions(sql: postgres.Sql) {
 
   // แจกเหรียญ/อัปเดตสตรีคสูงสุดให้เฉพาะคนที่คะแนนเพิ่งขยับ — เหรียญจึงมาถึงโดยไม่ต้องรอ
   // ใครเปิด profile card (การเปิด card ก็ประเมินซ้ำได้ ผลเท่ากันเพราะ insert แบบไม่ทับของเดิม)
-  if (rows.length > 0) {
+  const touched = [
+    ...rows.map((r) => r.prediction_id as string),
+    ...stale.map((r) => r.prediction_id),
+  ];
+  if (touched.length > 0) {
     const users = await sql<{ user_id: string }[]>`
       select distinct user_id from predictions
-      where id = any(${rows.map((r) => r.prediction_id as string)}::uuid[])
+      where id = any(${touched}::uuid[])
     `;
     await awardBadgesForUsers(sql, users.map((u) => u.user_id));
   }
 
   // จำนวนนี้คือ "แถวที่เพิ่งสร้างใหม่หรือคะแนนเปลี่ยนจริง" เท่านั้น ไม่ใช่จำนวนคำทายทั้งหมด
-  return { processed: rows.length };
+  return { processed: rows.length, cleaned: stale.length };
 }
