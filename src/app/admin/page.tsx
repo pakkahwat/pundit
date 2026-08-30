@@ -131,7 +131,13 @@ export default async function AdminPage() {
                   {run.status === "success" ? (
                     <Badge tone="accent">สำเร็จ</Badge>
                   ) : run.status === "running" ? (
-                    <Badge>กำลังรัน/ค้าง</Badge>
+                    Date.now() - Date.parse(run.started_at) > 5 * 60_000 ? (
+                      <span className="rounded-full bg-danger/15 px-2 py-0.5 text-xs font-medium text-danger">
+                        ค้าง — โดนตัดกลางคัน (ไม่ได้รันอยู่จริง)
+                      </span>
+                    ) : (
+                      <Badge>กำลังรัน</Badge>
+                    )
                   ) : (
                     <span className="rounded-full bg-danger/15 px-2 py-0.5 text-xs font-medium text-danger">
                       พัง

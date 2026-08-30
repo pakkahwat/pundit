@@ -9,7 +9,7 @@ import { leagueMembers, leagues } from '@/db/schema';
 import { pendingPredictionCount } from '@/lib/leagues/pending';
 import { getCurrentMatchday } from '@/lib/matches/current-matchday';
 import { PlayerAvatar } from '@/components/player-avatar';
-import { realNameHint } from '@/lib/display-name';
+import { ProfileName } from '@/components/profile-name';
 
 type LeaderboardRow = {
   user_id: string;
@@ -117,18 +117,17 @@ export default async function LeaderboardPage({ params }: { params: Promise<{ id
                     isAi={r.player_kind === 'ai'}
                     agentKey={r.agent_key}
                   />
-                  <span
-                    title={realNameHint(r.display_name, r.google_name)}
-                    className={`min-w-0 flex-1 break-words text-sm text-foreground ${
-                      realNameHint(r.display_name, r.google_name) ? 'cursor-help' : ''
-                    }`}
-                  >
-                    {r.name}
-                    {r.player_kind === 'ai' && (
-                      <span className="ml-2">
-                        <Badge tone="accent">AI</Badge>
-                      </span>
-                    )}
+                  {/* กดชื่อ = การ์ดโปรไฟล์ (สถิติ สตรีค เหรียญ ชื่อจริง) — หน้าอันดับคือที่ที่คน
+                    กดชื่อกันจริงมากที่สุด เดิมลืมต่อไว้ ทำเป็นแค่ tooltip เฉลยชื่อ */}
+                  <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <ProfileName
+                      leagueId={id}
+                      userId={r.user_id}
+                      name={r.name ?? 'สมาชิก'}
+                      isAi={r.player_kind === 'ai'}
+                      className="text-sm text-foreground"
+                    />
+                    {r.player_kind === 'ai' && <Badge tone="accent">AI</Badge>}
                   </span>
                   <span className="shrink-0 text-xs text-muted">{r.scored_matches} นัด</span>
                   <span className="w-14 shrink-0 text-right font-semibold tabular-nums text-foreground">

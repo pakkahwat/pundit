@@ -47,11 +47,16 @@ async function predictFor(agent: AgentRow, context: MatchContext) {
         `agent ${agent.agent_key} เป็น strategy 'llm' แต่ไม่มี provider/model_id ใน DB`,
       );
     }
+    // บีบ timeout ต่อ call ให้จบก่อนกำแพง 60 วิของ Vercel เสมอ — default 60 วิของ llmPredict
+    // ทำให้ call ที่เริ่มวินาทีที่ 35 ลากถึงวินาทีที่ 95 ได้ ฟังก์ชันโดนฆ่ากลางทาง แถวใน
+    // cron_runs เลยค้างเป็น 'running' ตลอดกาล (เห็นในหน้า admin มาแล้วจริง)
+    // budget: เช็ค deadline ก่อนเริ่ม call ที่ ~35 วิ + call ยาวสุด 20 วิ = จบใน ~55 วิ
     const result = await llmPredict(
       agent.provider,
       agent.model_id,
       context,
       agent.system_prompt,
+      { timeoutMs: 20_000, maxRetries: 2 },
     );
     return {
       outcome: result.outcome as PredictionOutcome,

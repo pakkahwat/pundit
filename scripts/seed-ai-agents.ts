@@ -95,9 +95,12 @@ const AGENTS: AgentSeed[] = [
   },
   {
     agentKey: "open-router",
-    displayName: "นินจาเงียบเหงา (stealth/ox-alpha)",
+    // เดิมคือ stealth/ox-alpha — ช่วงทดสอบจบแล้ว (เฉลยว่าคือ GLM-5.3 Flash ของ ZAI ซึ่งเป็น
+    // โมเดลเสียเงิน) ทุก call เลยพังรัวจนหน้า admin ฟ้อง 1,369 ครั้ง/สัปดาห์ ย้ายมาอยู่
+    // GLM-5.2:free — ตระกูลเดียวกัน ตัวตน "นินจา GLM" คงเดิม และฟรีจริง ไม่ต้องเติมเครดิต
+    displayName: "นินจาเงียบเหงา (GLM-5.2)",
     provider: "openrouter",
-    modelId: "stealth/ox-alpha",
+    modelId: "z-ai/glm-5.2:free",
     strategy: "llm",
     systemPrompt: null,
   },
