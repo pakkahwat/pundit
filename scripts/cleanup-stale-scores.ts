@@ -32,7 +32,6 @@ async function main() {
       where p.id = ps.prediction_id
         and m.id = p.match_id
         and (m.status <> 'FINISHED' or m.home_score is null or m.away_score is null)
-        and m.kickoff_at > now()
       returning ps.prediction_id
     `;
     console.log(`ลบแต้มผีแล้ว ${stale.length} แถว`);

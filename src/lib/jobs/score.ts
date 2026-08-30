@@ -20,17 +20,15 @@ export async function runScorePredictions(sql: postgres.Sql) {
   // ความแม่นบนหน้าเว็บขัดแย้งกันเอง) — insert ข้างล่างมองเฉพาะนัด FINISHED จึงไม่มีวัน
   // แก้แถวพวกนี้ได้เอง ต้องลบทิ้งตรง ๆ แล้วถ้าวันหน้านัดนั้นจบจริงก็จะถูกคิดใหม่ตามปกติ
   //
-  // ลบเฉพาะนัดที่ "ยังไม่ถึงเวลาเตะ" (kickoff อนาคต) เท่านั้น — นัดที่เตะไปแล้วแต่สถานะ
-  // ใน DB ค้างเป็นยังไม่จบ อาจเป็นแค่ sync ยังตามไม่ทัน แต้มที่ตัดไว้เป็นของแท้ ห้ามลบ
-  // (เจอจริง: football-data ส่งข้อมูลเก่าทับนัด MD2 ที่จบแล้ว ถ้าลบตามสถานะอย่างเดียว
-  // จะพาแต้มแท้หายไปด้วย) ปล่อยให้ sync คืนสภาพแล้วระบบ result_version คิดใหม่เอง
+  // ลบได้ปลอดภัยเสมอ เพราะการ์ดกันดาวน์เกรดใน upsertMatch (sync-results.ts) การันตีว่า
+  // นัดที่จบจริงใน DB จะไม่มีวันถูกถอยกลับเป็นยังไม่จบ — ดังนั้นแถวแต้มที่ชี้ไปนัดยังไม่จบ
+  // คือของหลอนแน่นอน และถ้านัดนั้นจบจริงภายหลัง insert ข้างล่างก็ตัดแต้มใหม่ให้ครบเอง
   const stale = await sql<{ prediction_id: string }[]>`
     delete from prediction_scores ps
     using predictions p, matches m
     where p.id = ps.prediction_id
       and m.id = p.match_id
       and (m.status <> 'FINISHED' or m.home_score is null or m.away_score is null)
-      and m.kickoff_at > now()
     returning ps.prediction_id
   `;
 
