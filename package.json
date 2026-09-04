@@ -42,7 +42,8 @@
     "db:test-sportmonks": "tsx scripts/test-sportmonks.ts",
     "db:test-simulate-finish": "tsx scripts/test-simulate-finish.ts",
     "db:cleanup-stale-scores": "tsx scripts/cleanup-stale-scores.ts",
-    "db:recover-results": "tsx scripts/recover-missing-results.ts"
+    "db:recover-results": "tsx scripts/recover-missing-results.ts",
+    "db:cron-runs": "tsx scripts/debug-cron-runs.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.45",

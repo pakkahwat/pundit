@@ -13,6 +13,32 @@ export type FdMatch = {
   score: { fullTime: { home: number | null; away: number | null } };
 };
 
+// ค่าที่ enum match_status รับได้ (ตรงกับ vocabulary ของ football-data.org)
+const MATCH_STATUSES = new Set([
+  'SCHEDULED', 'TIMED', 'POSTPONED', 'SUSPENDED', 'CANCELLED',
+  'IN_PLAY', 'PAUSED', 'FINISHED', 'AWARDED',
+]);
+
+/**
+ * แปลง status ที่ได้จาก API ให้เป็นค่าที่ DB รับได้เสมอ
+ *
+ * ทำไมต้องมี: football-data.org ส่งข้อมูลเสียมาจริง ๆ (เจอบน prod 2026-09-04) — ช่อง status
+ * ของบางนัดบรรจุ "เวลา" มาแทนชื่อสถานะ เช่น {"utcDate":"2026-09-04T19:00:00Z",
+ * "status":"2026-09-04 18:00:00Z"} พอส่งเข้า enum ทั้ง transaction พังตั้งแต่นัดนั้น
+ * ผลคือ sync ทั้งรอบไม่ได้อะไรเลย cron ตอบ 500 ติดกันจนเกือบโดน cron-job.org ปิดงานอัตโนมัติ
+ *
+ * เดาสถานะแทนแบบอนุรักษ์นิยม: มีสกอร์ครบ = จบแล้ว นอกนั้นถือว่ายังไม่เตะ — และถึงเดาพลาด
+ * ก็ไม่ทำลายข้อมูลที่ถูกต้องอยู่แล้ว เพราะการ์ดใน on conflict ห้ามดาวน์เกรดนัดที่จบไปแล้ว
+ */
+function safeStatus(m: FdMatch): string {
+  if (MATCH_STATUSES.has(m.status)) return m.status;
+  const home = m.score?.fullTime?.home;
+  const away = m.score?.fullTime?.away;
+  // != null ครอบทั้ง null และ undefined — ถ้าใช้ !== null แล้วก้อน score หายไปทั้งก้อน
+  // (ซึ่งข้อมูลชุดที่พังแบบนี้เป็นได้) จะกลายเป็น undefined !== null = จริง แล้วเดาว่า "จบแล้ว"
+  return home != null && away != null ? 'FINISHED' : 'TIMED';
+}
+
 // token อ่านจาก process.env เท่านั้น ห้าม hardcode
 export async function fdFetch<T>(pathname: string): Promise<T> {
   const token = process.env.FOOTBALL_DATA_API_TOKEN;
@@ -46,7 +72,7 @@ export async function upsertMatch(
     )
     values (
       ${m.id}, ${seasonId}, ${m.matchday}, ${homeTeamId}, ${awayTeamId},
-      ${m.utcDate}, ${m.status}, ${m.score.fullTime.home}, ${m.score.fullTime.away}, 0, now()
+      ${m.utcDate}, ${safeStatus(m)}, ${m.score?.fullTime?.home ?? null}, ${m.score?.fullTime?.away ?? null}, 0, now()
     )
     on conflict (external_id) do update set
       season_id = excluded.season_id,
@@ -139,6 +165,7 @@ export async function runSyncResults(
 
   let processed = 0;
   let skipped = 0;
+  let failed = 0;
   const matchdays: Record<string, number | null> = {};
 
   const dateRangeQuery = (() => {
@@ -163,8 +190,15 @@ export async function runSyncResults(
         skipped++;
         continue;
       }
-      await upsertMatch(sql, season.id, homeTeamId, awayTeamId, m);
-      processed++;
+      // นัดเดียวพังต้องไม่ล้มทั้งงาน — ข้อมูลจากผู้ให้บริการเสียได้เสมอ (ดู safeStatus)
+      // และการเสีย sync ทั้งรอบเพราะนัดเดียวแพงกว่าการข้ามนัดนั้นไปมาก
+      try {
+        await upsertMatch(sql, season.id, homeTeamId, awayTeamId, m);
+        processed++;
+      } catch (err) {
+        failed++;
+        log(`[${code}] ข้ามนัด id=${m.id} (${m.homeTeam.name} vs ${m.awayTeam.name}): ${String(err)}`);
+      }
     }
 
     // อัปเดต current_matchday จากโปรแกรมแข่งที่เพิ่ง sync มา ไม่ใช่จากค่า currentMatchday ของ
@@ -175,5 +209,6 @@ export async function runSyncResults(
     log(`[${code}] sync ผลเสร็จ · แมตช์เดย์ ${matchdays[code]}`);
   }
 
-  return { processed, skipped, matchdays };
+  if (failed > 0) log(`เตือน: มี ${failed} นัดที่ upsert ไม่สำเร็จ (ดูบรรทัดข้างบน)`);
+  return { processed, skipped, failed, matchdays };
 }
