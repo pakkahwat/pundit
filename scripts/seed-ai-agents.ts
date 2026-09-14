@@ -86,10 +86,20 @@ const AGENTS: AgentSeed[] = [
     systemPrompt: null,
   },
   {
+    // ประวัติการย้ายรุ่นของลมกรด (agent_key คงเดิมเพื่อรักษาคำทาย/คะแนนเก่าไว้):
+    // 1. mistral-small-latest — ใช้ได้ถึงต้น ก.ย. 2026 แล้ว Mistral ถอดออกจากแผนฟรี: ทุก call
+    //    ได้ 429 "Rate limit exceeded" พร้อม header x-ratelimit-limit-req-minute: 0 (คือไม่มี
+    //    สิทธิ์เรียกเลย ไม่ใช่โควตาเต็มชั่วคราว) งานทายผลยิงซ้ำอยู่ 10 วัน พัง 3,700+ ครั้ง
+    //    ทดสอบ 14 ก.ย. 2026 ด้วย key ฟรีตัวเดิม: mistral-small / magistral-small /
+    //    mistral-medium = limit 0, mistral-large = 403 tier_not_allowed — เหลือเรียกได้เฉพาะ
+    //    ตระกูล Ministral (3B 750 req/นาที · 8B 188 · 14B 30) งานนี้ยิง provider ละไม่เกิน
+    //    12/นาที (LLM_DELAY_MS) จึงพอทั้งสามตัว
+    // 2. ปัจจุบัน: ministral-14b-latest — ตัวใหญ่สุดที่แผนฟรียังให้ ทดสอบ structured output
+    //    ผ่าน scripts/test-llm.ts แล้ว (npx tsx scripts/test-llm.ts mistral ministral-14b-latest)
     agentKey: "mistral-small",
-    displayName: "ลมกรดฝรั่งเศส (Mistral Small)",
+    displayName: "ลมกรดฝรั่งเศส (Ministral 14B)",
     provider: "mistral",
-    modelId: "mistral-small-latest",
+    modelId: "ministral-14b-latest",
     strategy: "llm",
     systemPrompt: null,
   },

@@ -55,7 +55,7 @@ const fakeContext: MatchContext = {
 // รัน: npm run db:test-llm -- <provider> <model-id>
 //   npm run db:test-llm -- google gemini-flash-lite-latest
 //   npm run db:test-llm -- groq llama-3.3-70b-versatile
-//   npm run db:test-llm -- mistral mistral-small-latest
+//   npm run db:test-llm -- mistral ministral-14b-latest
 //   npm run db:test-llm -- openrouter stealth/ox-alpha
 //   npm run db:test-llm -- tokenrouter qwen/qwen3.8-max-free
 async function main() {

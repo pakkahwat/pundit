@@ -3,6 +3,10 @@ import type postgres from "postgres";
 
 import { db } from "@/db/client";
 import { baselinePredict } from "@/lib/ai/baseline";
+import {
+  CONSECUTIVE_FAILURES_TO_TRIP,
+  isCircuitTripped,
+} from "@/lib/ai/circuit";
 import { buildMatchContext, type MatchContext } from "@/lib/ai/context";
 import { hasApiKey, llmPredict } from "@/lib/ai/llm";
 import {
@@ -30,7 +34,14 @@ type AgentRow = {
   system_prompt: string | null;
 };
 
-async function predictFor(agent: AgentRow, context: MatchContext) {
+// probe = ยิงหยั่งเชิงของ agent ที่วงจรตัด (ดู lib/ai/circuit.ts) — retry แค่ครั้งเดียว เพราะจุดประสงค์
+// คือเช็คว่า "ยังพังอยู่ไหม" ด้วยราคาถูก แต่ยังเผื่อ 503 ชั่วคราวของ free tier ไว้หนึ่งจังหวะ
+// (ถ้าไม่ retry เลย จังหวะแย่ครั้งเดียวจะทำให้ทั้งรอบของตัวนั้นถูกข้าม)
+async function predictFor(
+  agent: AgentRow,
+  context: MatchContext,
+  options: { probe: boolean },
+) {
   if (agent.strategy === "static_form_based") {
     const { outcome, reasoning } = baselinePredict(context);
     return {
@@ -56,7 +67,7 @@ async function predictFor(agent: AgentRow, context: MatchContext) {
       agent.model_id,
       context,
       agent.system_prompt,
-      { timeoutMs: 20_000, maxRetries: 2 },
+      { timeoutMs: 20_000, maxRetries: options.probe ? 1 : 2 },
     );
     return {
       outcome: result.outcome as PredictionOutcome,
@@ -101,9 +112,32 @@ export async function runAiPredictions(
   const usable = agents.filter(
     (a) => a.strategy !== "llm" || hasApiKey(a.provider),
   );
-  const skipped = agents.filter((a) => !usable.includes(a));
-  for (const a of skipped) {
+  const noKey = agents.filter((a) => !usable.includes(a));
+  for (const a of noKey) {
     log(`ข้าม ${a.agent_key} — ยังไม่ได้ตั้ง API key ของ ${a.provider}`);
+  }
+
+  // วงจรตัดต่อ agent: ตัวที่พังติดกันหลายครั้งล่าสุดจะได้ยิงหยั่งเชิงแค่นัดเดียวในรอบนี้ แทนที่จะ
+  // ไล่พังทุกนัดที่ค้าง (พร้อม retry) แล้วกินงบเวลาของตัวอื่นไปด้วย — เหตุผลเต็มใน lib/ai/circuit.ts
+  // อ่านจาก ai_prediction_logs ซึ่งไม่อยู่ใต้ RLS จึงใช้ sql ตรง ๆ ได้
+  const tripped = new Set<string>();
+  for (const agent of usable) {
+    const recent = await sql<{ parse_succeeded: boolean; match_id: string }[]>`
+      select parse_succeeded, match_id from ai_prediction_logs
+      where ai_agent_id = ${agent.id}
+      order by created_at desc
+      limit ${CONSECUTIVE_FAILURES_TO_TRIP}
+    `;
+    const attempts = recent.map((r) => ({
+      succeeded: r.parse_succeeded,
+      matchId: r.match_id,
+    }));
+    if (isCircuitTripped(attempts)) {
+      tripped.add(agent.id);
+      log(
+        `${agent.agent_key}: พังติดกัน ${CONSECUTIVE_FAILURES_TO_TRIP} ครั้งล่าสุด — รอบนี้ยิงหยั่งเชิงแค่ 1 นัด`,
+      );
+    }
   }
 
   // ดึงเฉพาะคู่ (agent, match) ที่ยังไม่มีคำทาย — ทำใน SQL ทีเดียวแทนที่จะไล่เช็คใน JS
@@ -162,11 +196,19 @@ export async function runAiPredictions(
 
   let processed = 0;
   let failed = 0;
+  let skippedByCircuit = 0;
   const lastCallAt = new Map<string, number>();
+  // agent ที่หยั่งเชิงแล้วยังพัง — นัดที่เหลือของตัวนั้นในรอบนี้ข้ามเลย ไม่เรียก LLM ไม่บันทึก log
+  const probeFailed = new Set<string>();
 
   for (const item of pending) {
     const agent = agentById.get(item.agent_id);
     if (!agent) continue;
+
+    if (probeFailed.has(agent.id)) {
+      skippedByCircuit++;
+      continue;
+    }
 
     // เผื่อเวลาไว้ 1 รอบก่อนถึง deadline — หยุดก่อนโดนตัดกลางคัน จะได้บันทึก cron_runs ทัน
     if (Date.now() - startedAt > deadlineMs - LLM_DELAY_MS - 15_000) {
@@ -176,6 +218,10 @@ export async function runAiPredictions(
 
     const context = await buildMatchContext(sql, item.match_id);
     const isLlm = agent.strategy === "llm";
+    const probe = tripped.has(agent.id);
+    // แยก "LLM ตอบมาแล้ว" ออกจาก "ขั้นเขียน DB ล้ม" — ถ้าโมเดลตอบได้แต่ transaction พัง
+    // นั่นไม่ใช่สัญญาณว่าโมเดลล่ม ห้ามเอาไปตัดสินหยั่งเชิงว่าไม่ผ่านแล้วข้ามนัดที่เหลือของตัวนั้น
+    let llmAnswered = false;
 
     try {
       if (isLlm && agent.provider) {
@@ -187,7 +233,14 @@ export async function runAiPredictions(
       const { outcome, prompt, reasoning, latencyMs } = await predictFor(
         agent,
         context,
+        { probe },
       );
+      llmAnswered = true;
+      if (probe) {
+        // สำเร็จครั้งเดียวก็พอ — ปลดวงจรแล้วทายนัดที่เหลือต่อในรอบนี้เลย ไม่ต้องรอรอบถัดไป
+        tripped.delete(agent.id);
+        log(`  ${agent.agent_key}: หยั่งเชิงสำเร็จ กลับมาทายเต็มรูปแบบ`);
+      }
 
       const rows = await db.transaction(async (tx) => {
         await tx.execute(
@@ -222,6 +275,12 @@ export async function runAiPredictions(
       log(
         `  ${agent.agent_key}: แมตช์ ${item.match_id} ล้มเหลว — ${String(err)}`,
       );
+      if (probe && !llmAnswered) {
+        probeFailed.add(agent.id);
+        log(
+          `  ${agent.agent_key}: หยั่งเชิงไม่ผ่าน ข้ามนัดที่เหลือของตัวนี้ในรอบนี้`,
+        );
+      }
       // เก็บ error ไว้เพื่อแยก "ทายผิด" ออกจาก "ไม่ได้ทายเพราะระบบพัง" — สำคัญกับคำถามวิจัย
       await sql`
         insert into ai_prediction_logs (
@@ -235,5 +294,17 @@ export async function runAiPredictions(
     }
   }
 
-  return { processed, failed, remaining: pending.length - processed - failed };
+  if (skippedByCircuit > 0) {
+    log(
+      `ข้าม ${skippedByCircuit} รายการของ agent ที่วงจรตัด (จะลองใหม่รอบถัดไป)`,
+    );
+  }
+
+  // remaining นับรวมรายการที่ข้ามด้วย — มันยังค้างอยู่จริงและรอบถัดไปจะหยิบมาหยั่งเชิงใหม่
+  return {
+    processed,
+    failed,
+    skipped: skippedByCircuit,
+    remaining: pending.length - processed - failed,
+  };
 }

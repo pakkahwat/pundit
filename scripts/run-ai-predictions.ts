@@ -18,7 +18,10 @@ async function main() {
     const result = await withCronRun(sqlClient, 'run_ai_predictions', () =>
       runAiPredictions(sqlClient, { onLog: (m) => console.log(m) }),
     );
-    console.log(`เสร็จ: สำเร็จ ${result.processed} รายการ, ล้มเหลว ${result.failed} รายการ`);
+    console.log(
+      `เสร็จ: สำเร็จ ${result.processed} รายการ, ล้มเหลว ${result.failed} รายการ` +
+        (result.skipped ? `, ข้าม ${result.skipped} รายการ (agent ที่วงจรตัด)` : ""),
+    );
   } finally {
     await sqlClient.end();
   }
