@@ -77,23 +77,38 @@ async function main() {
     const google = createGoogleGenerativeAI({ apiKey });
     let translated = 0;
     let skipped = 0;
+    // ระบุชัดว่าอักษรจีน/เกาหลี/รัสเซีย/อาหรับต้องแปลหมด — ถ้าบอกแค่ "ชื่อคงตามต้นฉบับ" Gemini จะเดาว่า
+    // คำแปลกปลอมพวกนั้นเป็นชื่อแล้วคงไว้ (เจอตอนทดสอบ: แปลแล้วยังมี 排名第 ค้าง)
+    const translate = async (text: string, note = "") => {
+      const { object } = await generateObject({
+        model: google(MODEL_ID),
+        schema: z.object({
+          thai: z.string().describe("คำแปลภาษาไทยของข้อความทั้งหมด"),
+        }),
+        system:
+          "คุณเป็นนักแปล แปลข้อความที่ให้มาเป็นภาษาไทยให้ครบทุกประโยค ห้ามเพิ่ม ห้ามตัด ห้ามแก้ตัวเลขหรือความหมาย " +
+          "ชื่อทีม ชื่อคน ชื่อองค์กร ที่เขียนด้วยอักษรละตินคงตามต้นฉบับ ส่วนคำหรือวลีที่เป็นอักษรจีน ญี่ปุ่น เกาหลี " +
+          "รัสเซีย หรืออาหรับ ต้องแปลเป็นไทยทั้งหมด ห้ามคงไว้แม้แต่คำเดียว ส่วนที่เป็นภาษาไทยอยู่แล้วให้คงไว้ ตอบเฉพาะคำแปล" +
+          note,
+        prompt: text,
+        // Gemini free tier ช้าได้ถึง 30 วิ+ ช่วงพีค (เจอ timeout ตอนทดสอบ) — งานนี้ไม่มีเพดานเวลา
+        // แบบ cron จึงรอได้ยาว แถวที่ยังพังจะถูกข้ามและรันซ้ำครั้งหน้าเก็บได้เพราะยังไม่ใช่ไทยอยู่ดี
+        abortSignal: AbortSignal.timeout(60_000),
+        maxRetries: 3,
+      });
+      return object.thai.trim();
+    };
+
     for (const t of targets) {
       try {
-        const { object } = await generateObject({
-          model: google(MODEL_ID),
-          schema: z.object({
-            thai: z.string().describe("คำแปลภาษาไทยของข้อความทั้งหมด"),
-          }),
-          system:
-            "คุณเป็นนักแปล แปลข้อความที่ให้มาเป็นภาษาไทยให้ครบทุกประโยค ห้ามเพิ่ม ห้ามตัด ห้ามแก้ตัวเลขหรือความหมาย " +
-            "ชื่อทีม ชื่อคน ชื่อองค์กร คงตามต้นฉบับ ส่วนที่เป็นภาษาไทยอยู่แล้วให้คงไว้ ตอบเฉพาะคำแปล",
-          prompt: t.reasoning,
-          // Gemini free tier ช้าได้ถึง 30 วิ+ ช่วงพีค (เจอ timeout ตอนทดสอบ) — งานนี้ไม่มีเพดานเวลา
-          // แบบ cron จึงรอได้ยาว แถวที่ยังพังจะถูกข้ามและรันซ้ำครั้งหน้าเก็บได้เพราะยังไม่ใช่ไทยอยู่ดี
-          abortSignal: AbortSignal.timeout(60_000),
-          maxRetries: 3,
-        });
-        const thai = object.thai.trim();
+        let thai = await translate(t.reasoning);
+        if (!isThaiText(thai)) {
+          await sleep(DELAY_MS);
+          thai = await translate(
+            t.reasoning,
+            " คำเตือน: คำแปลก่อนหน้ายังมีอักษรที่ไม่ใช่ไทยหรือละตินค้างอยู่ แปลใหม่ให้เป็นไทยล้วน",
+          );
+        }
         if (!isThaiText(thai)) {
           skipped++;
           console.log(`  ข้าม ${t.id} — คำแปลยังไม่ใช่ไทย: ${thai.slice(0, 60)}…`);
