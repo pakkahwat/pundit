@@ -19,14 +19,21 @@ export async function checkStageMatchdayCollisions(
   code: string,
   log: (msg: string) => void = () => {},
 ): Promise<boolean> {
-  const dup = await sql<{ matchday: number; stages: string }[]>`
-    select matchday, string_agg(distinct stage, ',') as stages
-    from matches
-    where season_id = ${seasonId}::uuid and stage is not null
-    group by matchday
-    having count(distinct stage) > 1
-    order by matchday
-  `;
+  // เป็นการตรวจเสริม ห้ามทำให้งาน sync (ที่ upsert เสร็จแล้ว) กลายเป็นล้มเหลว
+  let dup: { matchday: number; stages: string }[];
+  try {
+    dup = await sql<{ matchday: number; stages: string }[]>`
+      select matchday, string_agg(distinct stage, ',') as stages
+      from matches
+      where season_id = ${seasonId}::uuid and stage is not null
+      group by matchday
+      having count(distinct stage) > 1
+      order by matchday
+    `;
+  } catch (err) {
+    log(`[${code}] เช็คเลขแมตช์เดย์ซ้ำข้ามรอบไม่ได้: ${String(err)}`);
+    return false;
+  }
   const detail = dup.map((d) => `md ${d.matchday}: ${d.stages}`).join(' · ');
   if (dup.length > 0) {
     log(`[${code}] ⚠️ เลขแมตช์เดย์ซ้ำข้ามรอบ — ${detail} (ต้องแปลงเลขตอน sync ก่อนเปิดรอบน็อกเอาต์)`);
@@ -57,12 +64,21 @@ export async function getStageMaps(
   for (const id of unique) result.set(id, new Map());
   if (unique.length === 0) return result;
 
-  const rows = await sql<{ season_id: string; matchday: number; stage: string | null }[]>`
-    select season_id, matchday, min(stage) as stage
-    from matches
-    where season_id = any(${unique}::uuid[]) and stage is not null
-    group by season_id, matchday
-  `;
+  // ป้ายรอบเป็นของแต่ง ไม่ใช่ข้อมูลหลัก — ถ้าอ่านไม่ได้ (เช่น deploy โค้ดก่อนรัน db:migrate-match-stage
+  // เกิดจริง 14 ก.ย. 2026: ทั้งเว็บล้มเพราะคอลัมน์ stage ยังไม่มี) ให้ตกไปเป็น "แมตช์เดย์ N" เงียบ ๆ
+  // ดีกว่าให้หน้าแรก/หน้าลีกทุกหน้า 500 ทั้งเว็บ
+  let rows: { season_id: string; matchday: number; stage: string | null }[];
+  try {
+    rows = await sql<{ season_id: string; matchday: number; stage: string | null }[]>`
+      select season_id, matchday, min(stage) as stage
+      from matches
+      where season_id = any(${unique}::uuid[]) and stage is not null
+      group by season_id, matchday
+    `;
+  } catch (err) {
+    console.warn(`[stage-map] อ่าน matches.stage ไม่ได้ ใช้ป้าย "แมตช์เดย์ N" แทน: ${String(err)}`);
+    return result;
+  }
 
   const bySeason = new Map<string, { matchday: number; stage: string | null }[]>();
   for (const r of rows) {
