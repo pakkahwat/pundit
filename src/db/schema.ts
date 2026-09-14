@@ -173,6 +173,8 @@ export const matches = pgTable(
       .references(() => teams.id),
     kickoffAt: timestamp("kickoff_at", { withTimezone: true }).notNull(),
     status: matchStatusEnum("status").notNull().default("SCHEDULED"),
+    /** รอบของ football-data (LEAGUE_STAGE, PLAYOFFS, LAST_16, ...) — null สำหรับแถวเก่า/ลีกปกติ */
+    stage: text("stage"),
     homeScore: integer("home_score"),
     awayScore: integer("away_score"),
     resultVersion: integer("result_version").notNull().default(0),

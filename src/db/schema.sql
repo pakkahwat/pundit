@@ -132,6 +132,9 @@ create table matches (
   away_team_id uuid not null references teams(id),
   kickoff_at timestamptz not null,          -- แหล่งความจริงเดียวของเส้นตายทายผล
   status match_status not null default 'SCHEDULED',
+  -- รอบของ football-data (REGULAR_SEASON สำหรับลีก · LEAGUE_STAGE/PLAYOFFS/LAST_16/... สำหรับบอลถ้วย)
+  -- ใช้แสดงชื่อรอบแทนเลขแมตช์เดย์ (ดู lib/matches/stage-label.ts) — null สำหรับแถวเก่า
+  stage text,
   home_score integer,
   away_score integer,
   result_version integer not null default 0, -- เพิ่มเฉพาะตอนสกอร์/status เปลี่ยนจริง — หัวใจของการคิดคะแนนแบบ idempotent

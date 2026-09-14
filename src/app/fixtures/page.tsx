@@ -17,6 +17,7 @@ import { leagueMembers, leagues, matches, seasons, teams } from "@/db/schema";
 import { formatKickoff } from "@/lib/match-time";
 import { competitionByCode } from "@/lib/football/competitions";
 import { getCurrentMatchday } from "@/lib/matches/current-matchday";
+import { matchdayLabeler } from "@/lib/matches/stage-map";
 
 type SearchParams = Promise<{
   competition?: string | string[];
@@ -44,7 +45,8 @@ export default async function FixturesPage({
     .from(leagueMembers)
     .innerJoin(leagues, eq(leagueMembers.leagueId, leagues.id))
     .innerJoin(seasons, eq(leagues.seasonId, seasons.id))
-    .where(eq(leagueMembers.userId, session.user.id))
+    // ฤดูกาลที่ปิดแล้วไม่มีแท็บ — โปรแกรมของมันจะไม่ถูก sync อีก โชว์ไปก็มีแต่นัดที่ไม่มีวันมีผล
+    .where(and(eq(leagueMembers.userId, session.user.id), eq(seasons.isActive, true)))
     .orderBy(asc(seasons.competitionCode));
   const uniqueSeasons = [
     ...new Map(seasonsForUser.map((season) => [season.id, season])).values(),
@@ -66,6 +68,8 @@ export default async function FixturesPage({
   }
 
   const currentMatchday = await getCurrentMatchday(selectedSeason.id);
+  // ป้ายรอบ: ลีกปกติ "แมตช์เดย์ N" · บอลถ้วย "เพลย์ออฟ นัดแรก" ฯลฯ (ดู lib/matches/stage-label.ts)
+  const label = await matchdayLabeler(selectedSeason.id);
   const [range] = await db
     .select({
       minMd: sql<number>`min(${matches.matchday})`,
@@ -150,16 +154,16 @@ export default async function FixturesPage({
         )}
         <div className="text-center">
           <p className="font-display text-lg font-semibold text-foreground">
-            แมตช์เดย์ {selectedMatchday}
+            {label(selectedMatchday)}
           </p>
           {selectedMatchday === currentMatchday ? (
-            <p className="text-xs text-accent">แมตช์เดย์ปัจจุบัน</p>
+            <p className="text-xs text-accent">รอบปัจจุบัน</p>
           ) : (
             <Link
               href={href(currentMatchday)}
               className="text-xs text-muted hover:text-foreground hover:underline"
             >
-              กลับไปแมตช์เดย์ปัจจุบัน
+              กลับไป{label(currentMatchday)}
             </Link>
           )}
         </div>
@@ -176,7 +180,7 @@ export default async function FixturesPage({
         )}
       </div>
       {matchRows.length === 0 ? (
-        <EmptyState>ยังไม่มีโปรแกรมในแมตช์เดย์ {selectedMatchday}</EmptyState>
+        <EmptyState>ยังไม่มีโปรแกรมใน{label(selectedMatchday)}</EmptyState>
       ) : (
         <ul className="flex flex-col gap-3">
           {matchRows.map((match) => {

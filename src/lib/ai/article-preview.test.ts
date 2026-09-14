@@ -37,6 +37,7 @@ const preview: PreviewSource = {
   date: "2026-09-18",
   seasonName: "Premier League",
   matchday: 5,
+  roundLabel: "แมตช์เดย์ 5",
   fixtures: [
     {
       homeTeam: "Arsenal FC",

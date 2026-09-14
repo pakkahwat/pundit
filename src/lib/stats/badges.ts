@@ -150,6 +150,8 @@ export function isBadgeKey(value: unknown): value is BadgeKey {
 /** หนึ่งนัดที่จบแล้วของผู้ใช้คนนี้ — เรียงตามเวลาคิกออฟจากเก่าไปใหม่ก่อนส่งเข้ามา */
 export type ScoredRow = {
   matchday: number;
+  /** ฤดูกาลของนัด — ใช้แยก "แมตช์เดย์ 3" ของ PL กับของ CL ออกจากกันตอนนับเพอร์เฟกต์ (ไม่มี = กลุ่มเดียว) */
+  seasonId?: string;
   correct: boolean;
   /** ผลที่ทายไว้ — ใช้กับเหรียญสายเหย้า/เยือน/เสมอ */
   predicted: "HOME" | "DRAW" | "AWAY";
@@ -253,11 +255,15 @@ export function evaluateBadges(
   }
 
   // ── สายแมตช์เดย์ ──
-  const byMatchday = new Map<number, ScoredRow[]>();
+  // จัดกลุ่มด้วย (ฤดูกาล, แมตช์เดย์) ไม่ใช่เลขแมตช์เดย์เปล่า ๆ — คนที่อยู่ทั้งลีก PL และ CL
+  // จะมี "แมตช์เดย์ 3" สองชุด ถ้ารวมกันจะต้องถูก 9 + 18 นัดถึงจะได้เพอร์เฟกต์ ซึ่งไม่ใช่กติกา
+  // (แถวที่ไม่มี seasonId — เทสต์/ข้อมูลเก่า — ตกอยู่กลุ่มเดียวกันเหมือนเดิม)
+  const byMatchday = new Map<string, ScoredRow[]>();
   for (const row of rows) {
-    const group = byMatchday.get(row.matchday) ?? [];
+    const key = `${row.seasonId ?? ""}:${row.matchday}`;
+    const group = byMatchday.get(key) ?? [];
     group.push(row);
-    byMatchday.set(row.matchday, group);
+    byMatchday.set(key, group);
   }
   // หมายเหตุ: เกณฑ์นี้ดูเฉพาะนัดที่ "ผู้ใช้ทายและจบแล้ว" ในแมตช์เดย์นั้น ไม่ได้บังคับว่าต้องทาย
   // ครบทุกนัดของโปรแกรม — การทายน้อยนัดเองก็เป็นความเสี่ยงอยู่แล้ว (นัดที่ไม่ทาย = 0 แต้มถาวร)

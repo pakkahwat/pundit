@@ -2,6 +2,7 @@ import type postgres from 'postgres';
 
 import { COLOR, postToDiscord, type DiscordMessage } from '@/lib/notify/discord';
 import { getCurrentMatchdays } from '@/lib/matches/current-matchday';
+import { matchdayLabeler } from '@/lib/matches/stage-map';
 import { withUserContextSql } from '@/db/rls';
 
 // ── แจ้งเตือนเข้า Discord ของแต่ละลีก ─────────────────────────────────────────
@@ -75,6 +76,7 @@ async function deadlineRule(sql: postgres.Sql, league: League): Promise<Candidat
   if (slackers.length === 0) return [];
 
   const hours = Math.round(next.hours_left);
+  const label = await matchdayLabeler(league.season_id, sql);
   return [
     {
       kind: 'deadline',
@@ -82,7 +84,7 @@ async function deadlineRule(sql: postgres.Sql, league: League): Promise<Candidat
       message: {
         embeds: [
           {
-            title: `⏰ อีกราว ${hours} ชม. จะปิดรับทายแมตช์เดย์ ${md}`,
+            title: `⏰ อีกราว ${hours} ชม. จะปิดรับทาย${label(md)}`,
             description: `**ยังทายไม่ครบ:** ${slackers
               .map((s) => `${s.name} (${s.missing} นัด)`)
               .join(' · ')}\n\nทายไม่ทันคิกออฟคือเสียแต้มนัดนั้นถาวร`,
@@ -343,6 +345,7 @@ async function recapRule(sql: postgres.Sql, league: League): Promise<Candidate[]
           ? `AI แซงคนแล้ว (${bestAi.name} ${bestAi.total} · ${bestHuman.name} ${bestHuman.total})`
           : 'คนกับ AI เสมอกันพอดี'
       : '';
+  const label = await matchdayLabeler(league.season_id, sql);
 
   return [
     {
@@ -351,7 +354,7 @@ async function recapRule(sql: postgres.Sql, league: League): Promise<Candidate[]
       message: {
         embeds: [
           {
-            title: `📊 จบแมตช์เดย์ ${done.matchday} แล้ว`,
+            title: `📊 จบ${label(done.matchday)} แล้ว`,
             description: `${board}${verdict ? `\n\n${verdict}` : ''}`,
             color: COLOR.neutral,
             footer: { text: league.name },
@@ -421,6 +424,7 @@ export async function runNotify(sql: postgres.Sql, log = console.log) {
     from leagues l
     join seasons s on s.id = l.season_id
     where l.discord_webhook_url is not null
+      and s.is_active = true
   `;
 
   // แมตช์เดย์ปัจจุบันคำนวณเองจากโปรแกรมแข่ง ไม่ใช่อ่าน seasons.current_matchday

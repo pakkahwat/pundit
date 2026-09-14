@@ -102,6 +102,8 @@ export type PreviewSource = {
   date: string;
   seasonName: string;
   matchday: number;
+  /** ป้ายรอบที่คนอ่าน: "แมตช์เดย์ 5" หรือ "เพลย์ออฟ นัดแรก" (ดู lib/matches/stage-label.ts) */
+  roundLabel: string;
   fixtures: PreviewFixture[];
   standings: ArticleSource["standings"];
   predictorAccuracy: ArticleSource["predictorAccuracy"];
@@ -171,15 +173,15 @@ export function formatPreviewSource(src: PreviewSource): string {
       : "ยังไม่มีใครถูกคิดคะแนน";
 
   return `วันที่: ${src.date}
-ฤดูกาล: ${src.seasonName} — พรีวิวแมตช์เดย์ ${src.matchday}
+ฤดูกาล: ${src.seasonName} — พรีวิว${src.roundLabel}
 
-โปรแกรมแข่งของแมตช์เดย์นี้ (ฟอร์ม = 5 นัดหลังสุด ล่าสุดอยู่ซ้าย):
+โปรแกรมแข่งของรอบนี้ (ฟอร์ม = 5 นัดหลังสุด ล่าสุดอยู่ซ้าย):
 ${fixtures}
 
-ตารางคะแนนก่อนแมตช์เดย์ (6 อันดับแรก):
+ตารางคะแนนก่อนรอบนี้ (6 อันดับแรก):
 ${table}
 
-สถานการณ์ในลีกทายผล Pundit ก่อนแมตช์เดย์นี้:
+สถานการณ์ในลีกทายผล Pundit ก่อนรอบนี้:
 ${accuracy}`;
 }
 

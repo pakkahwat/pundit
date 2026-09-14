@@ -33,6 +33,7 @@ import { formatKickoff, isMatchLocked } from "@/lib/match-time";
 import { pendingPredictionCount } from "@/lib/leagues/pending";
 import { outcomeLabel } from "@/lib/predictions/outcome";
 import { getCurrentMatchday } from "@/lib/matches/current-matchday";
+import { matchdayLabeler } from "@/lib/matches/stage-map";
 
 export default async function RevealPage({
   params,
@@ -69,6 +70,8 @@ export default async function RevealPage({
   }
 
   const currentMatchday = await getCurrentMatchday(league.seasonId);
+  // ป้ายรอบ: ลีกปกติ "แมตช์เดย์ N" · บอลถ้วย "เพลย์ออฟ นัดแรก" ฯลฯ (ดู lib/matches/stage-label.ts)
+  const label = await matchdayLabeler(league.seasonId);
   const [range] = await db
     .select({
       minMd: sql<number>`min(${matches.matchday})`,
@@ -252,7 +255,7 @@ export default async function RevealPage({
     <PageShell width="lg">
       <PageHeader
         title={league.name}
-        subtitle={`คำทายทุกคน · แมตช์เดย์ ${selectedMatchday} — เปิดเผยหลังแมตช์เริ่มเท่านั้น`}
+        subtitle={`คำทายทุกคน · ${label(selectedMatchday)} — เปิดเผยหลังแมตช์เริ่มเท่านั้น`}
       />
 
       <LeagueNav leagueId={id} active="reveal" pendingCount={pending} />
@@ -263,6 +266,7 @@ export default async function RevealPage({
         current={currentMatchday}
         min={minMatchday}
         max={maxMatchday}
+        label={label}
       />
 
       {visibleMatches.length === 0 ? (
@@ -509,12 +513,15 @@ function RevealMatchdayNav({
   current,
   min,
   max,
+  label,
 }: {
   leagueId: string;
   selected: number;
   current: number;
   min: number;
   max: number;
+  /** ป้ายรอบของแมตช์เดย์ (ดู lib/matches/stage-label.ts) */
+  label: (matchday: number) => string;
 }) {
   const href = (matchday: number) =>
     `/leagues/${leagueId}/reveal?md=${matchday}`;
@@ -542,16 +549,16 @@ function RevealMatchdayNav({
 
       <span className="min-w-0 text-center">
         <span className="block font-display text-lg font-semibold text-foreground">
-          แมตช์เดย์ {selected}
+          {label(selected)}
         </span>
         {selected === current ? (
-          <span className="text-xs text-accent">แมตช์เดย์ปัจจุบัน</span>
+          <span className="text-xs text-accent">รอบปัจจุบัน</span>
         ) : (
           <Link
             href={href(current)}
             className="text-xs text-muted hover:text-foreground hover:underline"
           >
-            ผ่านไปแล้ว · กลับไปแมตช์เดย์ {current}
+            ผ่านไปแล้ว · กลับไป{label(current)}
           </Link>
         )}
       </span>

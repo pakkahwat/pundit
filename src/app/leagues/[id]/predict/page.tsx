@@ -9,7 +9,7 @@ import { LeagueNav } from '@/components/league-nav';
 import { LinkPending } from '@/components/link-pending';
 import { db } from '@/db/client';
 import { withUserContext } from '@/db/rls';
-import { leagueMembers, leagues, matches, predictions, teams } from '@/db/schema';
+import { leagueMembers, leagues, matches, predictions, seasons, teams } from '@/db/schema';
 import { formatKickoff, isMatchLocked } from '@/lib/match-time';
 
 import { H2hDialog } from '@/components/h2h-dialog';
@@ -17,6 +17,7 @@ import { TeamCrest } from '@/components/team-crest';
 
 import { PredictionForm } from './prediction-form';
 import { getCurrentMatchday } from '@/lib/matches/current-matchday';
+import { matchdayLabeler } from '@/lib/matches/stage-map';
 
 export default async function PredictPage(props: PageProps<'/leagues/[id]/predict'>) {
   const { id } = await props.params;
@@ -42,7 +43,26 @@ export default async function PredictPage(props: PageProps<'/leagues/[id]/predic
     return <CenteredMessage title="คุณไม่ได้เป็นสมาชิกลีกนี้" />;
   }
 
+  // ฤดูกาลที่ปิดแล้ว (db:season-active --off) ไม่รับคำทาย — โปรแกรมของมันไม่ถูก sync อีก ทายไปก็ไม่มีวัน
+  // ถูกคิดคะแนน (การ์ดใน DB กันแค่ "หลังคิกออฟ" ไม่รู้เรื่องฤดูกาลปิด จึงต้องกันตรงนี้)
+  const [season] = await db
+    .select({ isActive: seasons.isActive })
+    .from(seasons)
+    .where(eq(seasons.id, league.seasonId))
+    .limit(1);
+  if (season && !season.isActive) {
+    return (
+      <CenteredMessage title="ลีกนี้ปิดแล้ว">
+        <p className="text-sm text-muted">
+          ลีกฟุตบอลของลีกนี้ถูกปิดใช้งาน ผลและคะแนนเดิมยังดูได้ในหน้าอื่น แต่ทายผลต่อไม่ได้
+        </p>
+      </CenteredMessage>
+    );
+  }
+
   const currentMatchday = await getCurrentMatchday(league.seasonId);
+  // ป้ายรอบ: ลีกปกติ "แมตช์เดย์ N" · บอลถ้วย "เพลย์ออฟ นัดแรก" ฯลฯ (ดู lib/matches/stage-label.ts)
+  const label = await matchdayLabeler(league.seasonId);
 
   // ── เลือกแมตช์เดย์ได้ ────────────────────────────────────────────────────────
   //
@@ -151,10 +171,11 @@ export default async function PredictPage(props: PageProps<'/leagues/[id]/predic
         current={currentMatchday}
         min={minMd}
         max={maxMd}
+        label={label}
       />
 
       {matchRows.length === 0 ? (
-        <EmptyState>ยังไม่มีนัดในแมตช์เดย์ {selectedMd}</EmptyState>
+        <EmptyState>ยังไม่มีนัดใน{label(selectedMd)}</EmptyState>
       ) : (
         <ul className="flex flex-col gap-3">
           {matchRows.map((m) => {
@@ -227,12 +248,15 @@ function MatchdayNav({
   current,
   min,
   max,
+  label,
 }: {
   leagueId: string;
   selected: number;
   current: number;
   min: number;
   max: number;
+  /** ป้ายรอบของแมตช์เดย์ (ดู lib/matches/stage-label.ts) */
+  label: (matchday: number) => string;
 }) {
   const href = (md: number) => `/leagues/${leagueId}/predict?md=${md}`;
   const arrow =
@@ -253,13 +277,13 @@ function MatchdayNav({
 
       <span className="min-w-0 text-center">
         <span className="block font-display text-lg font-semibold text-foreground">
-          แมตช์เดย์ {selected}
+          {label(selected)}
         </span>
         {selected === current ? (
-          <span className="text-xs text-accent">แมตช์เดย์ปัจจุบัน</span>
+          <span className="text-xs text-accent">รอบปัจจุบัน</span>
         ) : (
           <Link href={href(current)} className="text-xs text-muted hover:text-foreground hover:underline">
-            {selected < current ? 'ผ่านไปแล้ว' : 'ล่วงหน้า'} · กลับไปแมตช์เดย์ {current}
+            {selected < current ? 'ผ่านไปแล้ว' : 'ล่วงหน้า'} · กลับไป{label(current)}
           </Link>
         )}
       </span>

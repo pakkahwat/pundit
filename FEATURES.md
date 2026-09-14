@@ -10,7 +10,7 @@
 | `npx tsc --noEmit` | ผ่าน ไม่มี error |
 | `npm test` (node:test ผ่าน tsx) | ผ่าน 88/88 |
 | `npm run lint` | ติด 4 errors, 3 warnings (ของเดิม ดูท้ายไฟล์) |
-| ลีกที่เปิดใช้ | PL (พรีเมียร์ลีก), PD (ลาลีกา) — `src/lib/football/competitions.ts` |
+| ลีกที่เปิดใช้ | PL (พรีเมียร์ลีก), CL (แชมเปียนส์ลีก — เฟส 1 รอบลีก) — `src/lib/football/competitions.ts` · PD (ลาลีกา) ปิด 14 ก.ย. 2026 ข้อมูลยังอยู่ |
 
 ## เพิ่มล่าสุด (14 ก.ย. 2026 — ต้องรัน migrations ตาม DEPLOY.md ก่อน deploy)
 
@@ -19,6 +19,7 @@
 3. **ผู้เล่น "สภา AI"** ทายตามเสียงข้างมากของ AI ตัวอื่น ไม่เรียก LLM (§3)
 4. **แจ้งเตือนระบบพังเงียบเข้า Discord ผู้ดูแล** ส่งเฉพาะตอนสถานะเปลี่ยน (§6)
 5. **บทความพรีวิวก่อนแมตช์เดย์** + **แบนเนอร์ปกที่ตรงเนื้อหาแน่นอน** (โลโก้ 2 ทีม + สกอร์/เวลาเตะ ซ้อนบนภาพ) (§4)
+6. **แชมเปียนส์ลีก เฟส 1** — เปิดลีก CL, เก็บ `matches.stage`, ป้ายรอบแทนเลขแมตช์เดย์ในทุก nav/แจ้งเตือน/พรีวิว, โซนตารางคะแนนต่อลีก; ปิดลาลีกาด้วย `db:season-active` (§7)
 
 ---
 
@@ -156,6 +157,9 @@
 - football-data.org ผ่าน `cachedFetchJson` → ตาราง `api_cache` + fallback ข้อมูลเก่าเมื่อ API ล่ม; `sync-fixtures` เว้นระยะกันโควตา 10 req/นาที
 - SportMonks (พรีเมียร์ลีกเท่านั้น): สกอร์สด นาที เหตุการณ์ — ทับทีละฟิลด์ด้วย `overlayLiveScores` (`live-overlay.ts`) ไม่แทนทั้งรายการ; จับคู่ทีมด้วย `team-aliases.ts`; ไม่มี token = เงียบ ๆ ใช้สกอร์หน่วงเวลา
 - แมตช์เดย์ปัจจุบันคำนวณจากโปรแกรมใน DB (`current-matchday.ts`) ไม่เชื่อค่า provider
+- **บอลถ้วย (CL)**: `matches.stage` จาก football-data (LEAGUE_STAGE/PLAYOFFS/LAST_16/…) → `stage-label.ts` แปลงเป็น "เพลย์ออฟ นัดแรก" ฯลฯ (นัดแรก/สองนับจากลำดับแมตช์เดย์ในรอบ) ใช้ในหน้าโปรแกรม/ทาย/reveal/หน้าแรก/ตาราง/Discord/พรีวิว; โซนตาราง (1-8 เข้ารอบ, 9-24 เพลย์ออฟ, ที่เหลือตกรอบ) ตั้งใน `competitions.ts`
+  - **เฟส 2 ที่ยังไม่ทำ (ก่อน ก.พ. 2027)**: จับคู่สองนัด + สกอร์รวม, ซ่อนตารางหลังจบรอบลีก, bracket, กติกาผล 90 นาที vs ต่อเวลา (ต้องเก็บ `regularTime` แยก), เช็คว่าเลขแมตช์เดย์รอบน็อกเอาต์ของ football-data นับต่อจาก 8 หรือเริ่มใหม่ (ดู `db:season-status`)
+- ปิด/เปิดลีก: `db:season-active -- --code=XX --off|--on` (ทุกงานและหน้าสร้างลีก/รายการลีก/แจ้งเตือน อ่านจาก `seasons.is_active`)
 - `getStandings` คำนวณจาก `matches` เอง; `recover-missing-results` หักลบผลที่ API ไม่ส่งมาจากตารางคะแนน
 
 ---
@@ -171,7 +175,7 @@
 | เขียนคอลัมน์ + พรีวิวแมตช์เดย์ | `db:generate-article` | วันละครั้ง |
 | แจ้งเตือน Discord ของลีก | `db:notify` | ทุก 15 นาที |
 
-migrations: `db:migrate-ai-confidence`, `db:migrate-ops-alerts`, `db:migrate-article-kinds` (ใหม่) + outcome, articles, display-name, notifications, ai-reasoning, profile-badges (เดิม)
+migrations: `db:migrate-ai-confidence`, `db:migrate-ops-alerts`, `db:migrate-article-kinds`, `db:migrate-match-stage` (ใหม่) + outcome, articles, display-name, notifications, ai-reasoning, profile-badges (เดิม) · `db:season-active` เปิด/ปิดลีก
 สคริปต์อื่น: seed/remove AI agents, join AI เข้าลีก, backfill (covers, ai-reasoning, thai-reasoning, badges), reset (schema, play-data), debug (cron-runs, fd-matches, profile-stats, sync-window), season-status, cleanup-stale-scores, recover-missing-results, test (connection, llm — พิมพ์ % ด้วย, sportmonks, stadium-images, simulate-finish), list-models, generate-badge-images
 
 ---
@@ -188,7 +192,7 @@ migrations: `db:migrate-ai-confidence`, `db:migrate-ops-alerts`, `db:migrate-art
 
 ## 10. ตาราง DB (`src/db/schema.sql` เป็นแหล่งความจริง, `schema.ts` เขียนตาม)
 
-`users` (มี `display_name`, `player_kind`, `best_streak`), `accounts`, `sessions`, `verification_tokens`, `ai_agents`, `seasons`, `teams`, `matches` (`result_version`), `leagues` (`invite_code`, `scoring_config`, `discord_webhook_url`), `league_members`, `predictions` (RLS), `prediction_scores`, `user_badges`, `ai_prediction_logs` (+ `prob_home/draw/away`), `articles` (+ `kind`, `matchday`), `api_cache`, `notifications_sent`, `ops_alerts`, `cron_runs`
+`users` (มี `display_name`, `player_kind`, `best_streak`), `accounts`, `sessions`, `verification_tokens`, `ai_agents`, `seasons`, `teams`, `matches` (`result_version`, `stage`), `leagues` (`invite_code`, `scoring_config`, `discord_webhook_url`), `league_members`, `predictions` (RLS), `prediction_scores`, `user_badges`, `ai_prediction_logs` (+ `prob_home/draw/away`), `articles` (+ `kind`, `matchday`), `api_cache`, `notifications_sent`, `ops_alerts`, `cron_runs`
 
 ---
 

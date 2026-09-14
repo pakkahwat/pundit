@@ -42,6 +42,8 @@ function describeKey(key: string): string {
       return `ผู้เล่น AI "${name}"`;
     case 'articles':
       return 'การเขียนบทความ (คอลัมน์/พรีวิว)';
+    case 'stage':
+      return `โปรแกรมแข่งของลีก "${name}" มีเลขแมตช์เดย์ซ้ำข้ามรอบ`;
     default:
       return key;
   }

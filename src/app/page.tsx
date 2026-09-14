@@ -31,6 +31,8 @@ import { displayNameSql } from "@/lib/display-name";
 import { getTodayMatches } from "@/lib/matches/today";
 import { SubmitButton } from "@/components/submit-button";
 import { getCurrentMatchdays } from "@/lib/matches/current-matchday";
+import { matchdayLabel } from "@/lib/matches/stage-label";
+import { getStageMaps } from "@/lib/matches/stage-map";
 
 // นี่คือ Server Component (ไม่มี "use client" ด้านบน) — รันบน server เท่านั้น เรียก auth()
 // อ่าน session ตรง ๆ ได้เลยโดยไม่ต้องส่ง API call จาก browser แบบที่ Vue/Nuxt SPA เคยทำ
@@ -122,7 +124,8 @@ export default async function Home(props: PageProps<"/">) {
       .from(leagueMembers)
       .innerJoin(leagues, eq(leagueMembers.leagueId, leagues.id))
       .innerJoin(seasons, eq(seasons.id, leagues.seasonId))
-      .where(eq(leagueMembers.userId, userId))
+      // ลีกของฤดูกาลที่ปิดแล้ว (db:season-active --off) ไม่โผล่ — ให้ตรงกับหน้า /leagues
+      .where(and(eq(leagueMembers.userId, userId), eq(seasons.isActive, true)))
       .orderBy(asc(leagues.name)),
     db.select({ total: count() }).from(articles),
     db
@@ -138,6 +141,12 @@ export default async function Home(props: PageProps<"/">) {
   const matchdayBySeason = await getCurrentMatchdays(
     myLeagues.map((l) => l.seasonId),
   );
+  const stageMaps = await getStageMaps(myLeagues.map((l) => l.seasonId));
+  // ป้ายรอบของแมตช์เดย์ปัจจุบัน — บอลถ้วยแสดงชื่อรอบแทนเลข (ดู lib/matches/stage-label.ts)
+  const roundLabel = (seasonId: string): string | null => {
+    const md = matchdayBySeason.get(seasonId);
+    return md == null ? null : matchdayLabel(md, stageMaps.get(seasonId)?.get(md));
+  };
 
   const totalPages = Math.max(1, Math.ceil(total / ARTICLES_PER_PAGE));
   const page = Math.min(requestedPage, totalPages);
@@ -224,11 +233,7 @@ export default async function Home(props: PageProps<"/">) {
       <div className="flex flex-col gap-10">
         <Hero
           userName={me?.name ?? ""}
-          matchday={
-            myLeagues[0]
-              ? (matchdayBySeason.get(myLeagues[0].seasonId) ?? null)
-              : null
-          }
+          matchdayLabel={myLeagues[0] ? roundLabel(myLeagues[0].seasonId) : null}
           leagueCount={myLeagues.length}
           pendingCount={totalPending}
         />
@@ -301,9 +306,7 @@ export default async function Home(props: PageProps<"/">) {
                             {l.name}
                           </p>
                           <p className="mt-0.5 text-xs text-muted">
-                            {matchdayBySeason.has(l.seasonId)
-                              ? `แมตช์เดย์ ${matchdayBySeason.get(l.seasonId)}`
-                              : "ยังไม่เริ่ม"}
+                            {roundLabel(l.seasonId) ?? "ยังไม่เริ่ม"}
                           </p>
                         </div>
 

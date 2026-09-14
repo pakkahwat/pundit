@@ -70,6 +70,7 @@ export async function getStandings(code: string) {
       external_id: number; name: string; short_name: string | null; tla: string | null;
       crest_url: string | null; played: number; won: number; draw: number; lost: number;
       gf: number; ga: number; points: number; current_matchday: number | null;
+      season_id: string | null;
     }[]
   >`
     with season as (
@@ -118,7 +119,8 @@ export async function getStandings(code: string) {
       coalesce(sum(p.ga), 0)::int as ga,
       ((count(*) filter (where p.result = 'W')) * 3
         + (count(*) filter (where p.result = 'D')))::int as points,
-      (select current_matchday from season) as current_matchday
+      (select current_matchday from season) as current_matchday,
+      (select id from season)::text as season_id
     from season_teams st
     join teams t on t.id = st.team_id
     left join played p on p.team_id = st.team_id
@@ -163,6 +165,8 @@ export async function getStandings(code: string) {
     table,
     competitionName: competitionLabel(code, code),
     currentMatchday: rows[0]?.current_matchday ?? null,
+    /** ฤดูกาลที่ตารางนี้อ้างถึง — หน้าเว็บใช้หาป้ายรอบ ไม่ต้องถามซ้ำ */
+    seasonId: rows[0]?.season_id ?? null,
     // คำนวณสดจาก DB ทุกครั้ง ไม่มี cache ให้ค้าง — สองฟิลด์นี้คงไว้ให้หน้าเดิมใช้ต่อได้เฉย ๆ
     stale: false,
     fetchedAt: new Date(),

@@ -17,7 +17,7 @@ import {
   getConditionBreakdown,
   getUpsetMatches,
 } from "@/lib/stats/ai-insights";
-import { competitionByCode } from "@/lib/football/competitions";
+import { competitionShortLabel } from "@/lib/football/competitions";
 
 // ── เจาะลึก AI: ใครแม่นตรงไหน และนัดไหนหักปากกาทั้งลีก ───────────────────────────
 //
@@ -209,8 +209,7 @@ export default async function AiInsightsPage() {
                     {match.awayTeam}
                   </span>
                   <span className="text-xs text-muted">
-                    {competitionByCode(match.competitionCode)?.shortName ??
-                      match.competitionCode}{" "}
+                    {competitionShortLabel(match.competitionCode)}{" "}
                     · แมตช์เดย์ {match.matchday}
                   </span>
                   <span

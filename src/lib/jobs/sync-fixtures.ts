@@ -4,6 +4,7 @@ import { COMPETITIONS, competitionByCode } from '@/lib/football/competitions';
 
 import { fdFetch, upsertMatch, type FdMatch } from './sync-results';
 import { syncCurrentMatchdayColumn } from '@/lib/matches/current-matchday';
+import { checkStageMatchdayCollisions } from '@/lib/matches/stage-map';
 
 type Competition = {
   id: number;
@@ -68,23 +69,33 @@ export async function runSyncFixturesFor(sql: postgres.Sql, code: string, log = 
 
   let processed = 0;
   let skipped = 0;
+  let failed = 0;
   for (const m of matchesRes.matches) {
     const homeTeamId = teamIdByExternalId.get(m.homeTeam.id);
     const awayTeamId = teamIdByExternalId.get(m.awayTeam.id);
-    if (!homeTeamId || !awayTeamId) {
+    // บอลถ้วย: นัดรอบน็อกเอาต์ที่ยังไม่รู้คู่/รอบ football-data ส่ง matchday เป็น null มาได้
+    // (ทีมยังไม่กำหนดก็มี) — ข้ามไว้ก่อน รอบ sync ถัดไปค่อยได้ ไม่ให้ทั้งลีกล้มเพราะนัดเดียว
+    if (!homeTeamId || !awayTeamId || m.matchday == null) {
       skipped++;
       continue;
     }
-    await upsertMatch(sql, seasonId, homeTeamId, awayTeamId, m);
-    processed++;
+    // นัดเดียวพังต้องไม่ล้มทั้งงาน (เหตุผลเดียวกับ sync-results)
+    try {
+      await upsertMatch(sql, seasonId, homeTeamId, awayTeamId, m);
+      processed++;
+    } catch (err) {
+      failed++;
+      log(`[${code}] ข้ามนัด id=${m.id} (${m.homeTeam.name} vs ${m.awayTeam.name}): ${String(err)}`);
+    }
   }
-  log(`[${code}] sync ${processed} แมตช์ (ข้าม ${skipped})`);
+  log(`[${code}] sync ${processed} แมตช์ (ข้าม ${skipped}${failed ? ` · พัง ${failed}` : ''})`);
 
   // ทับค่า current_matchday ที่เพิ่งใส่ไปจาก API ด้วยค่าที่คำนวณจากโปรแกรมแข่งจริง
   // ต้องทำหลังใส่แมตช์ครบแล้วเท่านั้น เพราะกติกาใหม่อ่านจากตาราง matches
   // (ตอน insert ด้านบนยังไม่มีแมตช์สักนัด จึงยังคำนวณไม่ได้)
   const md = await syncCurrentMatchdayColumn([seasonId], sql);
   log(`[${code}] แมตช์เดย์ปัจจุบัน: ${md.get(seasonId)}`);
+  await checkStageMatchdayCollisions(sql, seasonId, code, log);
 
   return { processed, skipped, seasonId };
 }

@@ -93,6 +93,11 @@ Remove-Item Env:DATABASE_URL
 | บทความพรีวิวก่อนแมตช์เดย์ (`articles.kind/matchday` + unique ใหม่) | `npm run db:migrate-article-kinds` |
 | ผู้เล่น "สภา AI" | `npm run db:seed-ai-agents` แล้ว `npm run db:join-ai-agents-to-leagues` |
 | reasoning เก่าของ AI ที่เป็นจีน/อังกฤษ (ไม่ใช่ migration รันครั้งเดียวพอ) | `npm run db:backfill-thai-reasoning -- --dry-run` ดูจำนวนก่อน แล้ว `-- --yes` |
+| แชมเปียนส์ลีก (`matches.stage`) | `npm run db:migrate-match-stage` แล้ว `npm run db:sync-fixtures -- --code=CL` (3 requests) |
+| ปิดลาลีกา | `npm run db:season-active -- --code=PD --off` (ลีก/คำทายเดิมยังอยู่ — เปิดกลับ: ใส่ PD คืนใน `competitions.ts` แล้ว `--on`) |
+
+หลังเปิด CL: สร้างลีกใหม่ในหน้า "สร้างลีก" เลือกแชมเปียนส์ลีกได้ทันที AI จะเริ่มทายรอบถัดไปเอง
+(cron ทายให้ครบก่อนคิกออฟ แต่รอบแรกหลังเปิดควรเผื่อไว้ 1-2 วัน)
 
 ---
 

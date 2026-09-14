@@ -2,7 +2,7 @@ import { and, eq, gt, inArray, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { withUserContext } from '@/db/rls';
-import { matches, predictions } from '@/db/schema';
+import { matches, predictions, seasons } from '@/db/schema';
 
 // นับนัดใน "แมตช์เดย์ปัจจุบัน" ที่ยังเปิดรับทายอยู่ และผู้ใช้คนนี้ยังไม่ได้ทาย
 //
@@ -11,6 +11,9 @@ import { matches, predictions } from '@/db/schema';
 //
 // เทียบเวลาด้วย now() ของ Postgres ไม่ใช่นาฬิกาของ Node — ให้ตรงกับตัวที่บังคับเวลาปิดรับ
 // ตอนบันทึกคำทายจริง (guarded-upsert.ts) ไม่งั้นตัวเลขบนแท็บอาจไม่ตรงกับสิ่งที่ทายได้จริง
+//
+// ฤดูกาลที่ปิดแล้ว (seasons.is_active = false) นับเป็น 0 เสมอ — โปรแกรมของมันไม่ถูก sync อีก
+// นัดจึงค้าง "ยังไม่เตะ" ตลอดกาล ถ้าไม่กรองจะขึ้นป้าย "ยังไม่ทาย N นัด" หลอกไปเรื่อย ๆ
 export async function pendingPredictionCount(
   seasonId: string,
   matchday: number,
@@ -19,6 +22,7 @@ export async function pendingPredictionCount(
   const openMatches = await db
     .select({ id: matches.id })
     .from(matches)
+    .innerJoin(seasons, and(eq(seasons.id, matches.seasonId), eq(seasons.isActive, true)))
     .where(
       and(
         eq(matches.seasonId, seasonId),

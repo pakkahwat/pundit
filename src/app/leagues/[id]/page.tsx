@@ -132,6 +132,15 @@ export default async function LeaguePage({
       <LeagueNav leagueId={id} active="overview" pendingCount={pending} />
 
       <div className="flex flex-col gap-8">
+        {/* ฤดูกาลปิดแล้ว (db:season-active --off): ไม่ sync ไม่ทาย ไม่แจ้งเตือน — บอกให้รู้ตั้งแต่บนสุด */}
+        {season && !season.isActive && (
+          <Card className="animate-fade-up border-border bg-surface-hover/40">
+            <p className="text-sm text-foreground">
+              ลีกฟุตบอลของลีกนี้ปิดใช้งานแล้ว — ผลและคะแนนเดิมยังดูได้ แต่ทายผลต่อไม่ได้
+            </p>
+          </Card>
+        )}
+
         {/* ถ้ายังมีนัดที่ทายไม่ครบ ให้เห็นเป็นอย่างแรกบนหน้า — เป็นสิ่งเดียวบนหน้านี้ที่มีเส้นตาย */}
         {pending > 0 && (
           <Card className="animate-fade-up border-accent/40 bg-accent-soft/30">

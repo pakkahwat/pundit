@@ -1,5 +1,6 @@
 import type postgres from 'postgres';
 import { syncCurrentMatchdayColumn } from '@/lib/matches/current-matchday';
+import { checkStageMatchdayCollisions } from '@/lib/matches/stage-map';
 
 const FOOTBALL_DATA_BASE = 'https://api.football-data.org/v4';
 
@@ -8,6 +9,8 @@ export type FdMatch = {
   utcDate: string;
   status: string;
   matchday: number;
+  /** REGULAR_SEASON สำหรับลีก · LEAGUE_STAGE/PLAYOFFS/LAST_16/... สำหรับบอลถ้วย */
+  stage?: string | null;
   homeTeam: { id: number; name: string };
   awayTeam: { id: number; name: string };
   score: { fullTime: { home: number | null; away: number | null } };
@@ -67,16 +70,17 @@ export async function upsertMatch(
 ) {
   await sql`
     insert into matches (
-      external_id, season_id, matchday, home_team_id, away_team_id,
+      external_id, season_id, matchday, stage, home_team_id, away_team_id,
       kickoff_at, status, home_score, away_score, result_version, last_synced_at
     )
     values (
-      ${m.id}, ${seasonId}, ${m.matchday}, ${homeTeamId}, ${awayTeamId},
+      ${m.id}, ${seasonId}, ${m.matchday}, ${m.stage ?? null}, ${homeTeamId}, ${awayTeamId},
       ${m.utcDate}, ${safeStatus(m)}, ${m.score?.fullTime?.home ?? null}, ${m.score?.fullTime?.away ?? null}, 0, now()
     )
     on conflict (external_id) do update set
       season_id = excluded.season_id,
       matchday = excluded.matchday,
+      stage = coalesce(excluded.stage, matches.stage),
       home_team_id = excluded.home_team_id,
       away_team_id = excluded.away_team_id,
       -- การ์ดกันข้อมูลเก่าทับผลจริง: football-data (แผนฟรี) เชื่อรอบล่าสุดเสมอไม่ได้ —
@@ -207,6 +211,8 @@ export async function runSyncResults(
     const md = await syncCurrentMatchdayColumn([season.id], sql);
     matchdays[code] = md.get(season.id) ?? null;
     log(`[${code}] sync ผลเสร็จ · แมตช์เดย์ ${matchdays[code]}`);
+    // โปรแกรมรอบน็อกเอาต์ของบอลถ้วยเข้ามาทางงานนี้ (ช่วง ±10 วัน) — เช็คทันทีว่าเลขแมตช์เดย์ไม่ซ้ำข้ามรอบ
+    await checkStageMatchdayCollisions(sql, season.id, code, log);
   }
 
   if (failed > 0) log(`เตือน: มี ${failed} นัดที่ upsert ไม่สำเร็จ (ดูบรรทัดข้างบน)`);

@@ -1,9 +1,18 @@
 import Image from 'next/image';
 import Link from 'next/link';
 
+import { competitionByCode, type CompetitionConfig } from '@/lib/football/competitions';
 import type { StandingRow } from '@/lib/football/standings';
 
 import { Card } from './ui';
+
+// โซนเมื่อไม่รู้จักลีก (ข้อมูลเก่าค้างใน DB) — กติกาลีกทั่วไป
+const DEFAULT_ZONES: CompetitionConfig['zones'] = {
+  top: 4,
+  topLabel: 'แชมเปียนส์ลีก',
+  bottom: 3,
+  bottomLabel: 'ตกชั้น',
+};
 
 // แถบฟอร์ม 5 นัดหลังสุด — API ส่งมาเป็นสตริง "W,D,L,W,W" (เก่าสุดไปใหม่สุด)
 export function FormPills({ form }: { form: string | null }) {
@@ -48,6 +57,16 @@ export function StandingsTable({
   competitionCode: string;
   compact?: boolean;
 }) {
+  // โซนในตารางต่างกันตามลีก (ลีกปกติ: 1-4 ไป CL, ท้ายตกชั้น · CL รอบลีก: 1-8 เข้ารอบตรง,
+  // 9-24 เพลย์ออฟ, ที่เหลือตกรอบ) — กติกาอยู่ใน competitions.ts ที่เดียว
+  const zones = competitionByCode(competitionCode)?.zones ?? DEFAULT_ZONES;
+  const zoneClass = (position: number) => {
+    if (position <= zones.top) return 'bg-accent';
+    if (zones.mid && position <= zones.mid) return 'bg-accent/40';
+    if (position > table.length - zones.bottom) return 'bg-danger';
+    return 'bg-transparent';
+  };
+
   return (
     <>
       {/* จอมือถือกว้างไม่พอสำหรับทุกคอลัมน์ — แทนที่จะปล่อยให้เลื่อนแล้ว "แต้ม" ซึ่งเป็นตัวเลข
@@ -79,19 +98,13 @@ export function StandingsTable({
           <tbody className="divide-y divide-border">
             {table.map((r) => (
               <tr key={r.team.id} className="transition-colors hover:bg-surface-hover">
-                {/* แถบสีซ้ายบอกโซน: 1-4 ไปแชมเปียนส์ลีก, 3 อันดับท้ายตกชั้น — เป็นสิ่งแรกที่คนดู
-                    ตารางมองหา และเป็นข้อมูลที่ API ไม่ได้บอกมา ต้องรู้กติกาลีกเอง */}
+                {/* แถบสีซ้ายบอกโซน — เป็นสิ่งแรกที่คนดูตารางมองหา และเป็นข้อมูลที่ API ไม่ได้บอกมา
+                    ต้องรู้กติกาลีกเอง (ดู zones ใน competitions.ts) */}
                 <td className="px-3 py-3">
                   <span className="flex items-center gap-2">
                     <span
                       aria-hidden
-                      className={`h-6 w-0.5 rounded-full ${
-                        r.position <= 4
-                          ? 'bg-accent'
-                          : r.position >= table.length - 2
-                            ? 'bg-danger'
-                            : 'bg-transparent'
-                      }`}
+                      className={`h-6 w-0.5 rounded-full ${zoneClass(r.position)}`}
                     />
                     <span className="tabular-nums text-muted">{r.position}</span>
                   </span>
@@ -155,10 +168,15 @@ export function StandingsTable({
 
       <p className="mt-3 flex flex-wrap gap-4 text-xs text-muted">
         <span className="flex items-center gap-1.5">
-          <span aria-hidden className="h-3 w-0.5 rounded-full bg-accent" /> แชมเปียนส์ลีก
+          <span aria-hidden className="h-3 w-0.5 rounded-full bg-accent" /> {zones.topLabel}
         </span>
+        {zones.mid && (
+          <span className="flex items-center gap-1.5">
+            <span aria-hidden className="h-3 w-0.5 rounded-full bg-accent/40" /> {zones.midLabel}
+          </span>
+        )}
         <span className="flex items-center gap-1.5">
-          <span aria-hidden className="h-3 w-0.5 rounded-full bg-danger" /> ตกชั้น
+          <span aria-hidden className="h-3 w-0.5 rounded-full bg-danger" /> {zones.bottomLabel}
         </span>
         <span>กดชื่อทีมเพื่อดูโปรแกรมแข่ง · ข้อมูลจาก football-data.org</span>
       </p>

@@ -21,7 +21,7 @@ import {
 import { db } from "@/db/client";
 import { withUserContext } from "@/db/rls";
 import { leagueMembers, leagues, users } from "@/db/schema";
-import { competitionByCode } from "@/lib/football/competitions";
+import { competitionShortLabel } from "@/lib/football/competitions";
 import { BADGES, computeStreaks, isBadgeKey } from "@/lib/stats/badges";
 
 import { DisplayNameForm } from "./display-name-form";
@@ -168,7 +168,7 @@ export default async function SettingsPage(props: {
   // แถวเรียง kickoff ใหม่→เก่ามาแล้ว กลุ่มจึงเรียงตามเวลาเองโดยธรรมชาติ ในกลุ่มกลับเป็นเก่า→ใหม่
   const groups = new Map<string, ProfileRow[]>();
   for (const row of rows) {
-    const label = `${competitionByCode(row.competitionCode)?.shortName ?? row.competitionCode} · แมตช์เดย์ ${row.matchday}`;
+    const label = `${competitionShortLabel(row.competitionCode)} · แมตช์เดย์ ${row.matchday}`;
     const group = groups.get(label) ?? [];
     group.push(row);
     groups.set(label, group);

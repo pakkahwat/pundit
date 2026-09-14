@@ -13,6 +13,7 @@ import {
   type PreviewSource,
 } from "./article-source";
 import { getCurrentMatchday } from "@/lib/matches/current-matchday";
+import { matchdayLabeler } from "@/lib/matches/stage-map";
 
 // re-export ให้ผู้เรียกเดิมยังใช้เส้นทาง @/lib/ai/article ได้เหมือนเดิม
 export {
@@ -128,6 +129,7 @@ export async function buildPreviewSource(
   const [season] = await sql<{ name: string }[]>`
     select name from seasons where id = ${seasonId}
   `;
+  const label = await matchdayLabeler(seasonId, sql);
 
   const [fixtureRows, finished, standingsRows, accuracy] = await Promise.all([
     // เฉพาะนัดที่ยังไม่เตะ — แมตช์เดย์เดียวกันอาจมีนัดที่เตะไปแล้ว (นัดเปิดวันศุกร์, นัดเลื่อน)
@@ -231,6 +233,7 @@ export async function buildPreviewSource(
     date: today,
     seasonName: season?.name ?? "Premier League",
     matchday,
+    roundLabel: label(matchday),
     fixtures,
     standings: standingsRows.slice(0, 6).map((s, i) => ({
       rank: i + 1,

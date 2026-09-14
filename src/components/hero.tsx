@@ -10,12 +10,13 @@ import { LinkButton } from './ui';
 // ที่สุดบนหน้า เพราะทายไม่ทันคิกออฟคือเสียแต้มนัดนั้นถาวร แก้ย้อนหลังไม่ได้
 export function Hero({
   userName,
-  matchday,
+  matchdayLabel,
   leagueCount,
   pendingCount,
 }: {
   userName: string;
-  matchday: number | null;
+  /** ป้ายรอบปัจจุบันของลีกแรก เช่น "แมตช์เดย์ 5" หรือ "เพลย์ออฟ นัดแรก" — null = ยังไม่มีลีก */
+  matchdayLabel: string | null;
   leagueCount: number;
   pendingCount: number;
 }) {
@@ -39,7 +40,7 @@ export function Hero({
       <div className="relative sm:flex sm:items-center sm:justify-between sm:gap-6">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wider text-accent">
-            {matchday ? `แมตช์เดย์ ${matchday}` : 'ยินดีต้อนรับ'}
+            {matchdayLabel ?? 'ยินดีต้อนรับ'}
           </p>
 
           {urgent ? (

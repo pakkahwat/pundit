@@ -7,6 +7,7 @@ import { EmptyState, LinkButton, PageHeader, PageShell } from '@/components/ui';
 import { COMPETITIONS, competitionByCode } from '@/lib/football/competitions';
 import { getStandings } from '@/lib/football/standings';
 import { LinkPending } from '@/components/link-pending';
+import { matchdayLabeler } from '@/lib/matches/stage-map';
 
 export default async function StandingsPage(props: PageProps<'/standings'>) {
   const session = await auth();
@@ -21,13 +22,17 @@ export default async function StandingsPage(props: PageProps<'/standings'>) {
   // ถ้าส่งรหัสที่ไม่รู้จักมา (คนแก้ URL เอง) ให้ตกกลับไปลีกแรกแทนที่จะพัง
   const code = competitionByCode(raw ?? '')?.code ?? COMPETITIONS[0].code;
 
-  const { table, competitionName, currentMatchday, stale, fetchedAt } = await getStandings(code);
+  const { table, competitionName, currentMatchday, seasonId, stale, fetchedAt } =
+    await getStandings(code);
+
+  // ป้ายรอบ (บอลถ้วย: "เพลย์ออฟ นัดแรก" แทน "แมตช์เดย์ 9") — ใช้ฤดูกาลเดียวกับที่ตารางอ้างถึง
+  const label = seasonId ? await matchdayLabeler(seasonId) : (md: number) => `แมตช์เดย์ ${md}`;
 
   return (
     <PageShell width="lg">
       <PageHeader
         title="ตารางคะแนน"
-        subtitle={`${competitionName}${currentMatchday ? ` · แมตช์เดย์ ${currentMatchday}` : ''}`}
+        subtitle={`${competitionName}${currentMatchday ? ` · ${label(currentMatchday)}` : ''}`}
         actions={
           <LinkButton href="/" variant="secondary">
             กลับหน้าแรก

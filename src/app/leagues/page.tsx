@@ -11,6 +11,8 @@ import { competitionLabel } from '@/lib/football/competitions';
 import { joinLeagueById } from './actions';
 import { SubmitButton } from '@/components/submit-button';
 import { getCurrentMatchdays } from '@/lib/matches/current-matchday';
+import { matchdayLabel } from '@/lib/matches/stage-label';
+import { getStageMaps } from '@/lib/matches/stage-map';
 
 // หน้ารวมลีกทั้งหมดที่เปิดให้เข้าร่วมได้เลย ไม่ต้องมีลิงก์เชิญ — ลดขั้นตอนจาก
 // "ขอลิงก์จากเพื่อน -> เปิดลิงก์ -> กดเข้าร่วม" เหลือ "เลือกลีก -> เริ่มทาย"
@@ -42,11 +44,19 @@ export default async function LeaguesPage() {
     })
     .from(leagues)
     .innerJoin(seasons, eq(seasons.id, leagues.seasonId))
+    // ลีกของฤดูกาลที่ปิดไปแล้ว (db:season-active --off) ไม่แสดง — ข้อมูลยังอยู่ เปิดกลับได้
+    .where(eq(seasons.isActive, true))
     .orderBy(asc(leagues.name));
 
   // แมตช์เดย์ปัจจุบันคำนวณจากโปรแกรมแข่งจริง ไม่ใช่ค่าที่ผู้ให้บริการส่งมา
   // (ดูเหตุผลใน lib/matches/current-matchday.ts) — ดึงทีเดียวให้ทุกลีกในหน้านี้
   const matchdayBySeason = await getCurrentMatchdays(rows.map((r) => r.seasonId));
+  const stageMaps = await getStageMaps(rows.map((r) => r.seasonId));
+  // ป้ายรอบของแมตช์เดย์ปัจจุบัน — บอลถ้วยแสดงชื่อรอบแทนเลข (ดู lib/matches/stage-label.ts)
+  const roundLabel = (seasonId: string): string | null => {
+    const md = matchdayBySeason.get(seasonId);
+    return md == null ? null : matchdayLabel(md, stageMaps.get(seasonId)?.get(md));
+  };
 
   const mine = rows.filter((l) => l.isMember);
   const others = rows.filter((l) => !l.isMember);
@@ -81,9 +91,7 @@ export default async function LeaguesPage() {
                         </p>
                         <p className="mt-0.5 text-xs text-muted">
                           {competitionLabel(l.competitionCode, l.seasonName)} · {l.memberCount} ผู้เล่น
-                          {matchdayBySeason.has(l.seasonId)
-                            ? ` · แมตช์เดย์ ${matchdayBySeason.get(l.seasonId)}`
-                            : ''}
+                          {roundLabel(l.seasonId) ? ` · ${roundLabel(l.seasonId)}` : ''}
                         </p>
                       </div>
                       <span className="flex items-center justify-between gap-2">
