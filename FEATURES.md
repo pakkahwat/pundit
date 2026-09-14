@@ -98,6 +98,7 @@
 - **% ความมั่นใจ**: schema บังคับ `probHome/probDraw/probAway` (required — Groq strict mode ไม่รับ optional) → `normalizeProbabilities` ปรับให้รวม 100 หรือ null ถ้าใช้ไม่ได้; เก็บใน `ai_prediction_logs.prob_*`; ทดสอบแล้วทั้ง Groq/Gemini/Mistral ให้ตัวเลข
 - **สภา AI** (`council.ts`): นับโหวตของ AI ทุกตัวที่ทายนัดนั้นแล้ว เสมอกันตัดสินด้วยผลรวม % แล้วค่อยเจ้าบ้าน; % ของสภา = สัดส่วนเสียงแบบ Laplace smoothing (3 เสียงเอกฉันท์ = 66% ไม่ใช่ 100); รอให้ทุกตัวที่ยังทำงานได้ทายก่อน หรือเหลือ < 3 ชม.และมี ≥ 2 เสียง; นัดที่รอไม่บันทึก log ไม่นับพัง
 - ทุกครั้งที่ AI ทายจะเก็บ `ai_prediction_logs` (context snapshot, prompt, reasoning, %, latency, error) และแสดงเหตุผล + % ในหน้า reveal
+- **กัน reasoning หลุดภาษา** (`thai-text.ts`): prompt บังคับไทย + ถ้าตอบจีน/อังกฤษถามซ้ำ 1 ครั้ง (จำกัดเวลาไม่ให้ทะลุ 55 วิ) ของเก่าแปลด้วย `db:backfill-thai-reasoning` (เก็บต้นฉบับใน `raw_response`)
 - งาน `ai-predictions` ทำเท่าที่ทันใน `deadlineMs` (55 วิ) แล้วรอบถัดไปทำต่อ ไม่มีงานค้าง = จบทันทีไม่เรียก LLM
 - **วงจรตัดต่อ agent** (`circuit.ts`): พังติดกัน 5 ครั้งล่าสุด (กระจายมากกว่า 1 นัด) → หยั่งเชิงแค่ 1 นัด/รอบ (retry 1 ครั้ง) สำเร็จเมื่อไหร่กลับมาทายเต็มทันทีในรอบเดียวกัน — ทดสอบจริงแล้วกู้ 3 ตัวของ Groq ในรอบเดียว
 - แต่ละ AI มีไอคอน/โลโก้ของตัวเอง (`ai-icon.tsx`) สภา = Σ สีเหลืองอำพัน
@@ -171,7 +172,7 @@
 | แจ้งเตือน Discord ของลีก | `db:notify` | ทุก 15 นาที |
 
 migrations: `db:migrate-ai-confidence`, `db:migrate-ops-alerts`, `db:migrate-article-kinds` (ใหม่) + outcome, articles, display-name, notifications, ai-reasoning, profile-badges (เดิม)
-สคริปต์อื่น: seed/remove AI agents, join AI เข้าลีก, backfill (covers, ai-reasoning, badges), reset (schema, play-data), debug (cron-runs, fd-matches, profile-stats, sync-window), season-status, cleanup-stale-scores, recover-missing-results, test (connection, llm — พิมพ์ % ด้วย, sportmonks, stadium-images, simulate-finish), list-models, generate-badge-images
+สคริปต์อื่น: seed/remove AI agents, join AI เข้าลีก, backfill (covers, ai-reasoning, thai-reasoning, badges), reset (schema, play-data), debug (cron-runs, fd-matches, profile-stats, sync-window), season-status, cleanup-stale-scores, recover-missing-results, test (connection, llm — พิมพ์ % ด้วย, sportmonks, stadium-images, simulate-finish), list-models, generate-badge-images
 
 ---
 

@@ -92,6 +92,7 @@ Remove-Item Env:DATABASE_URL
 | แจ้งเตือนระบบพังเข้า Discord (`ops_alerts`) | `npm run db:migrate-ops-alerts` |
 | บทความพรีวิวก่อนแมตช์เดย์ (`articles.kind/matchday` + unique ใหม่) | `npm run db:migrate-article-kinds` |
 | ผู้เล่น "สภา AI" | `npm run db:seed-ai-agents` แล้ว `npm run db:join-ai-agents-to-leagues` |
+| reasoning เก่าของ AI ที่เป็นจีน/อังกฤษ (ไม่ใช่ migration รันครั้งเดียวพอ) | `npm run db:backfill-thai-reasoning -- --dry-run` ดูจำนวนก่อน แล้ว `-- --yes` |
 
 ---
 

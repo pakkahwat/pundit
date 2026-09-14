@@ -52,6 +52,8 @@ type PredictionResult = {
   reasoning: string;
   latencyMs: number | null;
   probabilities: OutcomeProbabilities | null;
+  /** หมายเหตุสั้น ๆ ไว้พิมพ์ใน log เช่น ถามซ้ำเพราะตอบภาษาอื่น */
+  note?: string;
 };
 
 // probe = ยิงหยั่งเชิงของ agent ที่วงจรตัด (ดู lib/ai/circuit.ts) — retry แค่ครั้งเดียว เพราะจุดประสงค์
@@ -119,6 +121,7 @@ async function predictFor(
       reasoning: result.reasoning,
       latencyMs: result.latencyMs,
       probabilities: result.probabilities,
+      note: result.retriedForLanguage ? "ถามซ้ำเพราะตอบภาษาอื่น" : undefined,
     };
   }
 
@@ -358,7 +361,7 @@ export async function runAiPredictions(
         lastCallAt.set(agent.provider, Date.now());
       }
 
-      const { outcome, prompt, reasoning, latencyMs, probabilities } =
+      const { outcome, prompt, reasoning, latencyMs, probabilities, note } =
         await predictFor(agent, context, { probe, councilVotes });
       llmAnswered = true;
       if (probe) {
@@ -396,7 +399,8 @@ export async function runAiPredictions(
       log(
         `  ${agent.agent_key}: ${context.homeTeam} vs ${context.awayTeam} -> ${outcome}` +
           (probabilities ? ` (มั่นใจ ${probabilities[outcome]}%)` : "") +
-          (latencyMs ? ` (${latencyMs}ms)` : ""),
+          (latencyMs ? ` (${latencyMs}ms)` : "") +
+          (note ? ` (${note})` : ""),
       );
     } catch (err) {
       failed++;
