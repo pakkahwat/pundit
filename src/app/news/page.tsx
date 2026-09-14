@@ -36,9 +36,10 @@ export default async function NewsArchivePage() {
       title: articles.title,
       body: articles.body,
       coverImageUrls: articles.coverImageUrls,
+      kind: articles.kind,
     })
     .from(articles)
-    .orderBy(desc(articles.publishedOn))
+    .orderBy(desc(articles.publishedOn), desc(articles.createdAt))
     .limit(60);
 
   return (
@@ -64,6 +65,7 @@ export default async function NewsArchivePage() {
               dateLabel={formatArticleDate(a.publishedOn)}
               coverImageUrls={a.coverImageUrls}
               excerpt={excerptOf(a.body)}
+              kindLabel={a.kind === 'preview' ? 'พรีวิวแมตช์เดย์' : null}
             >
               <ArticleBody body={a.body} />
             </ArticleCard>

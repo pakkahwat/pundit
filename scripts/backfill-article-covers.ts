@@ -3,10 +3,10 @@ import postgres from "postgres";
 import path from "node:path";
 
 import { classifyArticleTopic } from "@/lib/ai/article-cover";
-import { resolveFixture, teamNamesFromSource } from "@/lib/ai/article-source";
+import { coverExtrasFor, resolveFixture, teamNamesFromSource } from "@/lib/ai/article-source";
 import { detectTeamsInTitle } from "@/lib/football/team-aliases";
 import { sameTeam } from "@/lib/football/team-name";
-import { fetchTopicCoverImages } from "@/lib/ai/article-cover-fetch";
+import { buildArticleCover } from "@/lib/ai/article-cover-fetch";
 
 config({ path: path.resolve(__dirname, "../.env.local") });
 
@@ -57,18 +57,23 @@ async function main() {
         season_name: string;
         title: string;
         body: string;
+        kind: string;
         source_snapshot: Record<string, unknown> | null;
       }[]
     >`
-      select a.id, s.name as season_name, a.title, a.body, a.source_snapshot
+      select a.id, s.name as season_name, a.title, a.body, a.kind, a.source_snapshot
       from articles a
       join seasons s on s.id = a.season_id
       order by a.published_on desc
     `;
 
     for (const article of articles) {
-      // ใช้ตรรกะชุดเดียวกับตอนสร้างบทความจริง จะได้ไม่มีสองมาตรฐานว่ารูปไหนเหมาะกับหัวข้อไหน
-      const topic = classifyArticleTopic(article.title, article.body);
+      // ใช้ตรรกะชุดเดียวกับตอนสร้างบทความจริง จะได้ไม่มีสองมาตรฐานว่ารูปไหนเหมาะกับหัวข้อไหน —
+      // พรีวิวรู้ชนิดจาก DB อยู่แล้ว ไม่ต้องเดาจากพาดหัว (พาดหัว "ดวลเดือด" จะโดนจัดเป็น match)
+      const topic =
+        article.kind === "preview"
+          ? "preview"
+          : classifyArticleTopic(article.title, article.body);
       const knownTeams = article.source_snapshot
         ? teamNamesFromSource(article.source_snapshot)
         : undefined;
@@ -78,12 +83,21 @@ async function main() {
             preferUpcoming: topic === "preview",
           })
         : null;
-      const { urls: covers, layer } = await fetchTopicCoverImages(
-        article.season_name,
+      // สกอร์/เวลาเตะจาก snapshot เดิมของบทความ — ประกอบเป็นแบนเนอร์ชุดเดียวกับตอนสร้างจริง
+      const extras = article.source_snapshot
+        ? coverExtrasFor(topic, article.source_snapshot, fixture)
+        : {};
+      const { urls: covers, layer } = await buildArticleCover({
+        seasonName: article.season_name,
         topic,
-        article.title,
-        { knownTeams, teams, fixture, crestFor },
-      );
+        title: article.title,
+        knownTeams,
+        teams,
+        fixture,
+        crestFor,
+        score: extras.score,
+        label: extras.label,
+      });
       // พิมพ์ให้เห็นว่าแต่ละใบใช้ชั้นไหน — ตอน dry-run ดูบรรทัดพวกนี้ก็รู้ทันทีว่าชั้นสนาม/โลโก้
       // ทำงานจริงหรือยังไหลไปชั้นล่างหมดเหมือนก่อน
       console.log(

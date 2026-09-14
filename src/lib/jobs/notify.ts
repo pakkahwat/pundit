@@ -371,39 +371,46 @@ async function recapRule(sql: postgres.Sql, league: League): Promise<Candidate[]
 // ลิงก์ใช้ AUTH_URL ที่ตั้งไว้อยู่แล้วสำหรับ Auth.js แทนที่จะเพิ่ม env ใหม่อีกตัวให้ต้องดูแล
 // ถ้าไม่ได้ตั้ง (เช่นตอนรันในเครื่อง) ก็แค่ไม่มีลิงก์ ข้อความอื่นยังส่งได้ปกติ
 async function articleRule(sql: postgres.Sql, league: League): Promise<Candidate[]> {
-  const [article] = await sql<{ id: string; title: string; body: string }[]>`
-    select id, title, body
+  // วันเดียวกันมีได้ทั้งคอลัมน์ประจำวันและพรีวิวแมตช์เดย์ — ส่งทั้งคู่ (ref = id ของแต่ละใบ)
+  const articles = await sql<
+    { id: string; title: string; body: string; kind: string; matchday: number | null }[]
+  >`
+    select id, title, body, kind, matchday
     from articles
     where season_id = ${league.season_id}
       and created_at > now() - interval '24 hours'
     order by published_on desc, created_at desc
-    limit 1
+    limit 3
   `;
-  if (!article) return [];
-
-  // ย่อหน้าแรก ตัด ** ของ markdown ออกก่อนเพราะ Discord ตีความคนละแบบกับที่เราเรนเดอร์บนเว็บ
-  const first = article.body.split(/\n{2,}/)[0]?.replace(/\*\*/g, '').trim() ?? '';
-  const excerpt = first.length > 300 ? `${first.slice(0, 300)}…` : first;
 
   const base = process.env.AUTH_URL?.replace(/\/$/, '');
-  const link = base ? `\n\n[อ่านฉบับเต็ม](${base}/news/${article.id})` : '';
 
-  return [
-    {
+  return articles.map((article) => {
+    // ย่อหน้าแรก ตัด ** ของ markdown ออกก่อนเพราะ Discord ตีความคนละแบบกับที่เราเรนเดอร์บนเว็บ
+    const first = article.body.split(/\n{2,}/)[0]?.replace(/\*\*/g, '').trim() ?? '';
+    const excerpt = first.length > 300 ? `${first.slice(0, 300)}…` : first;
+    const link = base ? `\n\n[อ่านฉบับเต็ม](${base}/news/${article.id})` : '';
+    const isPreview = article.kind === 'preview';
+
+    return {
       kind: 'article',
       ref: article.id,
       message: {
         embeds: [
           {
-            title: `📰 ${article.title}`,
+            title: `${isPreview ? '🔭' : '📰'} ${article.title}`,
             description: `${excerpt}${link}`,
-            color: COLOR.neutral,
-            footer: { text: `คอลัมน์ประจำวันที่ AI เขียน · ${league.name}` },
+            color: isPreview ? COLOR.accent : COLOR.neutral,
+            footer: {
+              text: isPreview
+                ? `พรีวิวแมตช์เดย์${article.matchday ? ` ${article.matchday}` : ''} ที่ AI เขียน · ${league.name}`
+                : `คอลัมน์ประจำวันที่ AI เขียน · ${league.name}`,
+            },
           },
         ],
       },
-    },
-  ];
+    };
+  });
 }
 
 const RULES = [deadlineRule, revealRule, leadChangeRule, aiSplitRule, recapRule, articleRule];

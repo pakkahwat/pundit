@@ -74,6 +74,115 @@ export type StorySeed = {
   evidence: string[];
 };
 
+// ── พรีวิวก่อนแมตช์เดย์ ───────────────────────────────────────────────────────
+//
+// บทความอีกชนิดหนึ่ง (articles.kind = 'preview') เขียนเมื่อเหลือไม่ถึง 48 ชม.ก่อนนัดแรกของ
+// แมตช์เดย์ ข้อมูลที่ให้โมเดลคือโปรแกรม ฟอร์ม ตาราง และสถิติพบกัน — ล้วนเป็นสิ่งที่คนทายเห็นได้เอง
+// อยู่แล้วบนเว็บ **จงใจไม่ใส่คำทายของ AI ตัวไหนเลย** เพราะบทความออกก่อนคิกออฟ ถ้ามีคำทาย AI
+// หลุดไป คนก็แค่ทายตาม แล้วคำถาม "คนแม่นกว่า AI ไหม" จะตอบไม่ได้อีกเลย
+export type ArticleKind = "daily" | "preview";
+
+export type PreviewFixture = {
+  homeTeam: string;
+  awayTeam: string;
+  kickoffAt: string; // ISO
+  /** ฟอร์ม 5 นัดหลังสุด ล่าสุดอยู่ซ้าย เช่น "W W D L W" — ว่าง = ยังไม่มีข้อมูล */
+  homeForm: string;
+  awayForm: string;
+  homeRank: number | null;
+  awayRank: number | null;
+  homePoints: number | null;
+  awayPoints: number | null;
+  /** ผลเจอกัน 3 นัดหลังสุด เช่น "Arsenal 2-1 Chelsea · Chelsea 0-0 Arsenal" */
+  headToHead: string;
+};
+
+export type PreviewSource = {
+  kind: "preview";
+  date: string;
+  seasonName: string;
+  matchday: number;
+  fixtures: PreviewFixture[];
+  standings: ArticleSource["standings"];
+  predictorAccuracy: ArticleSource["predictorAccuracy"];
+};
+
+/** เวลาเตะแบบไทย สั้น ๆ สำหรับป้ายบนแบนเนอร์และ prompt เช่น "ส. 20 ก.ย. 21:00" */
+export function formatKickoffThai(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("th-TH", {
+    timeZone: "Asia/Bangkok",
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+// ประโยคที่ถือว่า "ชี้นำผล" ในพรีวิว — จงใจให้แคบ (ต้องบอกว่าใครจะชนะ/ควรทายอะไร) ไม่จับคำกลาง ๆ
+// อย่าง "น่าจะสนุก" หรือ "ลุ้น" เพราะเจอบ่อยในภาษาคอลัมน์และไม่ได้บอกใบ้ผล ถ้าจับกว้างเกินไป
+// พรีวิวจะถูกตีกลับทุกวันจนไม่มีพรีวิวเลย
+const TIP_PATTERN =
+  /ฟันธง|ทายว่า|ควรทาย|แนะนำให้ทาย|เชียร์ให้ทาย|ตัวเต็ง|เต็งหนึ่ง|น่าจะ ?(ชนะ|เอาชนะ|คว้าชัย|เก็บ ?(สาม|3) ?แต้ม)|มีโอกาสชนะ ?(สูง|มาก)|ชนะได้ไม่ยาก|ชนะแน่/;
+
+/** พรีวิวข้อความนี้บอกใบ้ผลหรือเปล่า (ใช้ตีกลับก่อนเผยแพร่ ดู jobs/article.ts) */
+export function looksLikeTip(text: string): boolean {
+  return TIP_PATTERN.test(text);
+}
+
+/** ข้อความที่ส่งให้โมเดลเขียนพรีวิว — ข้อมูลล้วน ไม่มีคำทายของใคร */
+export function formatPreviewSource(src: PreviewSource): string {
+  const fixtures =
+    src.fixtures.length > 0
+      ? src.fixtures
+          .map((f) => {
+            const rank = (r: number | null, p: number | null) =>
+              r === null ? "ยังไม่มีอันดับ" : `อันดับ ${r}${p === null ? "" : ` (${p} แต้ม)`}`;
+            return [
+              `${f.homeTeam} พบ ${f.awayTeam} — เตะ ${formatKickoffThai(f.kickoffAt)} (เวลาไทย)`,
+              `  ${f.homeTeam}: ${rank(f.homeRank, f.homePoints)} · ฟอร์ม ${f.homeForm || "ยังไม่มีข้อมูล"}`,
+              `  ${f.awayTeam}: ${rank(f.awayRank, f.awayPoints)} · ฟอร์ม ${f.awayForm || "ยังไม่มีข้อมูล"}`,
+              `  เจอกันล่าสุด: ${f.headToHead || "ยังไม่เคยเจอกันในข้อมูลที่มี"}`,
+            ].join("\n");
+          })
+          .join("\n\n")
+      : "ยังไม่มีโปรแกรมของแมตช์เดย์นี้";
+
+  const table =
+    src.standings.length > 0
+      ? src.standings
+          .map(
+            (s) =>
+              `${s.rank}. ${s.team} — ${s.points} แต้ม จาก ${s.played} นัด (ผลต่าง ${s.goalDiff})`,
+          )
+          .join("\n")
+      : "ยังไม่มีตารางคะแนน";
+
+  const accuracy =
+    src.predictorAccuracy.length > 0
+      ? src.predictorAccuracy
+          .map(
+            (a) =>
+              `${a.name}${a.isAi ? " (AI)" : ""} — ทายถูก ${a.correct} จาก ${a.scored} นัด`,
+          )
+          .join("\n")
+      : "ยังไม่มีใครถูกคิดคะแนน";
+
+  return `วันที่: ${src.date}
+ฤดูกาล: ${src.seasonName} — พรีวิวแมตช์เดย์ ${src.matchday}
+
+โปรแกรมแข่งของแมตช์เดย์นี้ (ฟอร์ม = 5 นัดหลังสุด ล่าสุดอยู่ซ้าย):
+${fixtures}
+
+ตารางคะแนนก่อนแมตช์เดย์ (6 อันดับแรก):
+${table}
+
+สถานการณ์ในลีกทายผล Pundit ก่อนแมตช์เดย์นี้:
+${accuracy}`;
+}
+
 function decodeRssHtml(value: string): string {
   return value
     .replace(/&lt;/g, "<")
@@ -248,14 +357,16 @@ export function resolveFixture(
   src: {
     recentResults?: FixtureLike[];
     upcomingMatches?: FixtureLike[];
-    // สองฟิลด์นี้อาจมาจาก source_snapshot เก่าที่ไม่มีฟิลด์ครบ จึงเป็น optional ทั้งคู่
+    /** โปรแกรมของพรีวิว (PreviewSource) — นับเป็นนัดข้างหน้าเหมือน upcomingMatches */
+    fixtures?: FixtureLike[];
+    // ฟิลด์เหล่านี้อาจมาจาก source_snapshot เก่าที่ไม่มีฟิลด์ครบ จึงเป็น optional ทั้งหมด
   },
   options: { preferUpcoming?: boolean } = {},
 ): ResolvedFixture | null {
   if (teams.length === 0) return null;
 
   const recent = src.recentResults ?? [];
-  const upcoming = src.upcomingMatches ?? [];
+  const upcoming = [...(src.upcomingMatches ?? []), ...(src.fixtures ?? [])];
   // บทความ preview ชี้ไปเกมข้างหน้า ส่วนบทความสรุปผลชี้ไปเกมที่เพิ่งจบ — เรียงลิสต์ตามนั้น
   const fixtures = options.preferUpcoming
     ? [...upcoming, ...recent]
@@ -278,13 +389,65 @@ export function resolveFixture(
 export function teamNamesFromSource(src: {
   recentResults?: { homeTeam: string; awayTeam: string }[];
   upcomingMatches?: { homeTeam: string; awayTeam: string }[];
+  fixtures?: { homeTeam: string; awayTeam: string }[];
   standings?: { team: string }[];
 }): string[] {
   return [
     ...new Set([
       ...(src.recentResults ?? []).flatMap((m) => [m.homeTeam, m.awayTeam]),
       ...(src.upcomingMatches ?? []).flatMap((m) => [m.homeTeam, m.awayTeam]),
+      ...(src.fixtures ?? []).flatMap((m) => [m.homeTeam, m.awayTeam]),
       ...(src.standings ?? []).map((s) => s.team),
     ]),
   ];
+}
+
+/**
+ * ของประกอบแบนเนอร์ที่มาจาก DB ล้วน ๆ: สกอร์ (บทความสรุปผล) หรือเวลาเตะ (พรีวิว) ของแมตช์ที่บทความ
+ * ผูกไว้ — ใช้ทั้งตอนสร้างบทความและตอน backfill จะได้ไม่มีสองมาตรฐาน
+ */
+export function coverExtrasFor(
+  topic: string,
+  src: {
+    recentResults?: { homeTeam: string; awayTeam: string; homeScore: number | null; awayScore: number | null }[];
+    upcomingMatches?: { homeTeam: string; awayTeam: string; kickoffAt: string }[];
+    fixtures?: { homeTeam: string; awayTeam: string; kickoffAt: string }[];
+  },
+  fixture: ResolvedFixture | null,
+): { score?: string; label?: string } {
+  if (!fixture) return {};
+  const isThis = (m: FixtureLike) =>
+    sameTeam(m.homeTeam, fixture.homeTeam) && sameTeam(m.awayTeam, fixture.awayTeam);
+
+  if (topic === "match") {
+    const result = (src.recentResults ?? []).find(isThis);
+    if (result && result.homeScore !== null && result.awayScore !== null) {
+      return { score: `${result.homeScore}-${result.awayScore}` };
+    }
+    return {};
+  }
+  if (topic === "preview") {
+    const upcoming = [...(src.upcomingMatches ?? []), ...(src.fixtures ?? [])].find(isThis);
+    const when = upcoming ? formatKickoffThai(upcoming.kickoffAt) : "";
+    return { label: when ? `พรีวิว · ${when}` : "พรีวิว" };
+  }
+  return {};
+}
+
+/**
+ * เอาชื่อทีมที่โมเดลบอกว่าเป็น "ทีมหลักของบทความ" มาเทียบกับชื่อจริงใน source — โมเดลอาจสะกด
+ * ต่างไปนิดหน่อย ("Man City" / "Manchester City") จึงเทียบผ่าน sameTeam แล้วคืนชื่อตามที่ DB ใช้
+ * ชื่อที่หาไม่เจอถูกทิ้ง เพื่อไม่ให้โมเดลลากทีมนอกลีก (จากความจำของมัน) เข้ามาในแบนเนอร์
+ */
+export function resolveFocusTeams(
+  focusTeams: string[] | undefined,
+  knownTeams: string[],
+): string[] {
+  if (!focusTeams) return [];
+  const resolved: string[] = [];
+  for (const name of focusTeams) {
+    const hit = knownTeams.find((known) => sameTeam(known, name));
+    if (hit && !resolved.includes(hit)) resolved.push(hit);
+  }
+  return resolved.slice(0, 2);
 }

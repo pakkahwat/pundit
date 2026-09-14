@@ -1,13 +1,16 @@
 import { parseRssItems } from "./article-source";
 import type { ResolvedFixture } from "./article-source";
 import {
+  TOPIC_LABEL,
+  bannerUrl,
   coverSearchQueries,
   fallbackCoverImages,
   isTeamCrestUrl,
   pexelsQueriesFor,
   pickBySeed,
-  vsBannerUrl,
+  toPexelsQuery,
   type ArticleTopic,
+  type CoverBanner,
 } from "./article-cover";
 import { stadiumPageFor } from "@/lib/football/stadiums";
 
@@ -185,21 +188,26 @@ export type CoverContext = {
   /** หาโลโก้จากชื่อทีม — ผู้เรียกผูกกับตาราง teams ผ่าน sameTeam เอง เพราะชื่อจากตารางฉายา
       ("Manchester City") กับชื่อใน DB ("Manchester City FC") เทียบตรงตัวไม่ติด */
   crestFor?: (team: string) => string | null;
+  /** คำบรรยายฉากภาพจากโมเดลที่เขียนบทความ (อังกฤษ ไม่มีชื่อทีม) — ใช้ค้น Pexels ก่อนคำค้นตามหมวด */
+  imageQuery?: string | null;
 };
 
 /** ชั้นที่ให้ภาพออกมาจริง — ให้ backfill/cron พิมพ์บอกได้ว่าแต่ละใบมาจากไหน */
-export type CoverLayer = "stadium" | "logos" | "news" | "pexels" | "stock";
+export type CoverLayer = "stadium" | "news" | "pexels" | "stock";
 
 export type CoverResult = { urls: string[]; layer: CoverLayer };
 
-// ลำดับการหา (บทความที่ผูกกับแมตช์ได้):
+// ลำดับการหา "ภาพพื้นหลัง" (บทความที่ผูกกับแมตช์ได้):
 //   1. ภาพสนามเจ้าบ้าน — เกี่ยวกับเกมนั้นแน่นอน และดูเป็นสื่อฟุตบอลจริง
-//   2. โลโก้เหย้า vs เยือน — เกี่ยวกับเกมนั้น 100% เพราะมาจาก DB เราเอง
-//   3. รูปจากข่าว → Pexels → รูปสต็อกในโค้ด (ชุดเดิม)
-// บทความที่ไม่ผูกกับแมตช์ (ตลาดซื้อขายรวม ๆ, สรุปหลายเกม) ข้ามสองชั้นแรกไปเลย
+//   2. รูปจากข่าว → Pexels (คำบรรยายฉากจากโมเดลก่อน แล้วค่อยคำค้นตามหมวด) → รูปสต็อกในโค้ด
+// บทความที่ไม่ผูกกับแมตช์ (ตลาดซื้อขายรวม ๆ, สรุปหลายเกม) ข้ามชั้นสนามไปเลย
 //
 // เดิมเอารูปข่าวขึ้นก่อน แต่พบว่ารูปที่ RSS แนบมาบ่อยครั้งเป็นภาพประกอบข่าวอื่นที่แค่ติดมากับ feed
 // ไม่เกี่ยวกับเกมในพาดหัวจริง สนามเจ้าบ้านแม้จะ "จำเพาะ" น้อยกว่าภาพจากเกม แต่ไม่มีทางผิดเกม
+//
+// ชั้น "โลโก้เหย้า vs เยือน" ที่เคยอยู่ตรงนี้ย้ายไปเป็นของซ้อนบนภาพใน buildArticleCover แล้ว —
+// โลโก้/สกอร์/เวลาเตะไม่ใช่ทางสำรองอีกต่อไป แต่เป็นส่วนที่รับประกันว่าปกตรงเรื่อง ใส่ทุกใบที่ผูก
+// แมตช์ได้ ส่วนฟังก์ชันนี้มีหน้าที่หา "รูปพื้นหลัง" อย่างเดียว
 export async function fetchTopicCoverImages(
   seasonName: string,
   topic: ArticleTopic,
@@ -207,43 +215,80 @@ export async function fetchTopicCoverImages(
   context: CoverContext = {},
 ): Promise<CoverResult> {
   const fallback = fallbackCoverImages(topic);
-  const { knownTeams, teams = [], fixture, crestFor } = context;
+  const { knownTeams, teams = [], fixture, imageQuery } = context;
   const withFallback = (image: string, layer: CoverLayer): CoverResult => ({
     urls: [image, ...fallback].slice(0, 6),
     layer,
   });
 
   if (topic === "match" || topic === "preview") {
-    // ไม่มี fixture จริงก็เดาจากพาดหัว — หน้าต่างข้อมูลของบทความแคบ (ผลย้อนหลัง 2 วัน,
-    // โปรแกรมแค่วันนี้) บทความ preview สุดสัปดาห์ที่เขียนวันศุกร์จึงหา fixture ไม่เจอเป็นปกติ
-    // ทีมแรกในพาดหัวอาจไม่ใช่เจ้าบ้านจริง แต่สนามของทีมที่ถูกเอ่ยถึงยังตรงเรื่องกว่า
-    // ภาพข่าวสุ่ม ๆ มาก และแบนเนอร์โลโก้ก็แค่สลับซ้ายขวาเท่านั้น ไม่มีอะไรผิดสาระ
+    // ไม่มี fixture จริงก็เดาจากพาดหัว — ทีมแรกในพาดหัวอาจไม่ใช่เจ้าบ้านจริง แต่สนามของทีมที่
+    // ถูกเอ่ยถึงยังตรงเรื่องกว่าภาพข่าวสุ่ม ๆ มาก
     const homeTeam = fixture?.homeTeam ?? teams[0];
     if (homeTeam) {
       const stadiumImage = await fetchStadiumImage(homeTeam);
       if (stadiumImage) return withFallback(stadiumImage, "stadium");
-    }
-
-    const pair =
-      fixture ??
-      (teams.length >= 2 ? { homeTeam: teams[0], awayTeam: teams[1] } : null);
-    if (pair && crestFor) {
-      const homeCrest = crestFor(pair.homeTeam);
-      const awayCrest = crestFor(pair.awayTeam);
-      if (homeCrest && awayCrest) {
-        return withFallback(vsBannerUrl(homeCrest, awayCrest), "logos");
-      }
     }
   }
 
   const newsImage = await newsImageFor(topic, seasonName, title, knownTeams);
   if (newsImage) return withFallback(newsImage, "news");
 
-  // เรียงคำค้นใหม่ตามพาดหัวด้วย บทความคนละใบจึงเริ่มจากคำค้นคนละอัน ได้ภาพต่างกันอีกชั้นหนึ่ง
-  for (const query of pexelsQueriesFor(topic, title)) {
+  // คำบรรยายฉากจากโมเดลมาก่อน (มันรู้ว่าบทความเล่าอะไร) แล้วค่อยคำค้นตามหมวด ซึ่งเรียงใหม่ตาม
+  // พาดหัวด้วย บทความคนละใบจึงเริ่มจากคำค้นคนละอัน ได้ภาพต่างกันอีกชั้นหนึ่ง
+  const sceneQuery = toPexelsQuery(imageQuery);
+  const queries = [
+    ...(sceneQuery ? [sceneQuery] : []),
+    ...pexelsQueriesFor(topic, title),
+  ];
+  for (const query of queries) {
     const stockImage = await searchPexelsPhoto(query, title);
     if (stockImage) return withFallback(stockImage, "pexels");
   }
 
   return { urls: fallback, layer: "stock" };
+}
+
+export type BuildCoverArgs = {
+  seasonName: string;
+  topic: ArticleTopic;
+  title: string;
+  /** สกอร์จบเกม "3-1" สำหรับบทความสรุปผล (ดู coverExtrasFor ใน article-source.ts) */
+  score?: string | null;
+  /** ป้ายมุมซ้ายบน — ไม่ส่งมา = ใช้ป้ายตามหมวด (TOPIC_LABEL) */
+  label?: string | null;
+} & CoverContext;
+
+/**
+ * ประกอบปกบทความให้ "ตรงเรื่องแน่นอน": หาภาพพื้นหลังจากชั้นต่าง ๆ แล้วซ้อนของที่มาจาก DB เราเอง
+ * (โลโก้สองทีม + สกอร์/เวลาเตะ, หรือโลโก้ทีมเดียว + ป้ายหัวข้อ) เก็บเป็น banner:// ให้การ์ดเรนเดอร์
+ * urls[0] คือแบนเนอร์ ถัดไปคือรูปพื้นหลังและรูปสำรองตามลำดับเดิม (การ์ดเก่าที่ยังไม่รู้จัก
+ * banner:// ก็ยังอ่าน urls ที่เหลือได้)
+ */
+export async function buildArticleCover(args: BuildCoverArgs): Promise<CoverResult> {
+  const { seasonName, topic, title, score, label, ...context } = args;
+  const { urls, layer } = await fetchTopicCoverImages(seasonName, topic, title, context);
+  const { teams = [], fixture, crestFor } = context;
+
+  const banner: CoverBanner = { bg: urls[0], label: label ?? TOPIC_LABEL[topic] };
+  const pair =
+    fixture ??
+    ((topic === "match" || topic === "preview") && teams.length >= 2
+      ? { homeTeam: teams[0], awayTeam: teams[1] }
+      : null);
+  if (pair && crestFor) {
+    const homeCrest = crestFor(pair.homeTeam);
+    const awayCrest = crestFor(pair.awayTeam);
+    if (homeCrest && awayCrest) {
+      banner.homeCrest = homeCrest;
+      banner.awayCrest = awayCrest;
+      if (score) banner.score = score;
+    }
+  }
+  if (!banner.homeCrest && teams[0] && crestFor) {
+    const crest = crestFor(teams[0]);
+    if (crest) banner.crest = crest;
+  }
+
+  return { urls: [bannerUrl(banner), ...urls].slice(0, 6), layer };
 }

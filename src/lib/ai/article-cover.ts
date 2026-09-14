@@ -325,3 +325,89 @@ export function parseVsBannerUrl(
     return null;
   }
 }
+
+// ── แบนเนอร์ประกอบเนื้อหา ("banner://") ────────────────────────────────────────
+//
+// ต่อยอดจาก vs:// — นอกจากโลโก้สองทีมแล้วยังพก "ภาพพื้นหลัง" (สนาม/ข่าว/Pexels) สกอร์ และป้ายกำกับ
+// มาด้วย การ์ดจึงแสดง รูปจริง + ข้อมูลที่เกี่ยวกับบทความนี้แน่นอน ซ้อนกัน แทนที่จะพึ่งรูปอย่างเดียว
+// ซึ่งตรงเรื่องบ้างไม่ตรงบ้าง (รูปที่ RSS แนบมาบ่อยครั้งเป็นของข่าวอื่นใน feed, ภาพสต็อกก็แค่ "ดูเป็น
+// ฟุตบอล") — โลโก้/สกอร์/เวลาเตะมาจาก DB เราเอง จึงไม่มีทางผิดเรื่อง
+// เก็บเป็น URL scheme ของเราเองด้วยเหตุผลเดียวกับ vs:// (ดูข้างบน): การ์ดฝั่ง client เรนเดอร์เอง
+// ไม่ต้องมีตัว render ภาพฝั่ง server และไม่ต้องเก็บไฟล์ภาพที่ไหนเลย
+export type CoverBanner = {
+  /** ภาพพื้นหลัง — ไม่มี = การ์ดใช้ gradient แทน */
+  bg?: string;
+  homeCrest?: string;
+  awayCrest?: string;
+  /** สกอร์จบเกม เช่น "3-1" — มีเฉพาะบทความสรุปผลที่ผูกกับแมตช์ได้ */
+  score?: string;
+  /** ป้ายสั้น ๆ มุมบนซ้าย เช่น "พรีวิว · ส. 21:00", "ตลาดซื้อขาย" */
+  label?: string;
+  /** โลโก้ทีมเดียว ใช้กับข่าวที่ไม่ใช่แมตช์ (ย้ายทีม/บาดเจ็บ) แสดงคู่กับป้าย */
+  crest?: string;
+};
+
+const BANNER_PREFIX = "banner://";
+
+export function bannerUrl(banner: CoverBanner): string {
+  return `${BANNER_PREFIX}${encodeURIComponent(JSON.stringify(banner))}`;
+}
+
+export function parseBannerUrl(url: string): CoverBanner | null {
+  if (!url.startsWith(BANNER_PREFIX)) return null;
+  try {
+    const parsed: unknown = JSON.parse(
+      decodeURIComponent(url.slice(BANNER_PREFIX.length)),
+    );
+    if (!parsed || typeof parsed !== "object") return null;
+    const raw = parsed as Record<string, unknown>;
+    const pick = (value: unknown) =>
+      typeof value === "string" && value.length > 0 ? value : undefined;
+    const banner: CoverBanner = {
+      bg: pick(raw.bg),
+      homeCrest: pick(raw.homeCrest),
+      awayCrest: pick(raw.awayCrest),
+      score: pick(raw.score),
+      label: pick(raw.label),
+      crest: pick(raw.crest),
+    };
+    // ต้องมีอย่างน้อยหนึ่งอย่างให้แสดง ไม่งั้นถือว่าเป็นของเสีย ให้การ์ดไปใช้ทางสำรอง
+    return Object.values(banner).some(Boolean) ? banner : null;
+  } catch {
+    return null;
+  }
+}
+
+/** URL นี้เป็นแบนเนอร์ที่การ์ดต้องเรนเดอร์เอง (ไม่ใช่รูปธรรมดา) หรือเปล่า — ทั้งแบบใหม่และ vs:// เดิม */
+export function isBannerUrl(url: string): boolean {
+  return url.startsWith(BANNER_PREFIX) || url.startsWith(VS_BANNER_PREFIX);
+}
+
+/** ป้ายหัวข้อภาษาไทยบนแบนเนอร์ — บอกผู้อ่านตั้งแต่ยังไม่กดว่าบทความนี้เรื่องอะไร */
+export const TOPIC_LABEL: Record<ArticleTopic, string> = {
+  transfer: "ตลาดซื้อขาย",
+  injury: "อาการบาดเจ็บ",
+  match: "สรุปผล",
+  preview: "พรีวิว",
+  standings: "ตารางคะแนน",
+  predictions: "คน vs AI",
+  general: "ข่าว",
+};
+
+/**
+ * แปลงคำบรรยายฉากที่โมเดลเขียนบทความส่งมา (imageQuery) ให้เป็นคำค้น Pexels ที่ใช้ได้
+ * กติกาเดียวกับ PEXELS_QUERIES: ต้องขึ้นต้นด้วย "soccer" และห้ามมีคำว่า football (ดูคอมเมนต์ข้างบน)
+ * คืน null ถ้าว่างหรือสั้นจนไร้ความหมาย
+ */
+export function toPexelsQuery(imageQuery: string | null | undefined): string | null {
+  if (!imageQuery) return null;
+  const cleaned = imageQuery
+    .toLowerCase()
+    .replace(/\bfootball\b/g, "soccer")
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (cleaned.length < 4) return null;
+  const query = cleaned.startsWith("soccer") ? cleaned : `soccer ${cleaned}`;
+  return query.split(" ").slice(0, 8).join(" ");
+}

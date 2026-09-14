@@ -145,6 +145,22 @@ export default async function RevealPage({
             order by apl.created_at desc
             limit 1
           )`,
+          // ความมั่นใจ (%) ในผลที่เลือก — อ่านจาก log แถวเดียวกับเหตุผล แสดงหลังคิกออฟเท่านั้น
+          // (ผูกกับ lockedMatchIds เหมือนเหตุผล) เพราะก่อนล็อกมันบอกใบ้ทิศทางคำทายได้
+          confidence: sql<number | null>`(
+            select case predictions.predicted_outcome
+              when 'HOME' then apl.prob_home
+              when 'DRAW' then apl.prob_draw
+              else apl.prob_away
+            end
+            from ai_prediction_logs apl
+            join ai_agents aa on aa.id = apl.ai_agent_id
+            where apl.match_id = predictions.match_id
+              and aa.user_id = predictions.user_id
+              and apl.parse_succeeded = true
+            order by apl.created_at desc
+            limit 1
+          )`,
         })
         .from(predictions)
         .innerJoin(users, eq(users.id, predictions.userId))
@@ -461,9 +477,14 @@ export default async function RevealPage({
                             </div>
 
                             {locked &&
-                              pred?.reasoning &&
-                              member.playerKind === "ai" && (
+                              member.playerKind === "ai" &&
+                              (pred?.reasoning || pred?.confidence != null) && (
                                 <p className="border-l-2 border-border pl-3 text-xs leading-relaxed text-muted">
+                                  {pred.confidence != null && (
+                                    <span className="mr-2 font-medium text-foreground tabular-nums">
+                                      มั่นใจ {pred.confidence}%
+                                    </span>
+                                  )}
                                   {pred.reasoning}
                                 </p>
                               )}

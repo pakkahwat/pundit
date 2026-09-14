@@ -92,6 +92,97 @@ export async function getConditionBreakdown(
   }));
 }
 
+export type CalibrationRow = {
+  name: string | null;
+  agentKey: string | null;
+  total: number;
+  correct: number;
+  /** ความมั่นใจเฉลี่ยในผลที่เลือก (%) */
+  avgConfidence: number;
+  /** ความแม่นจริง (%) */
+  accuracy: number;
+  /** Brier score 3 ผล: 0 = สมบูรณ์แบบ, ทายมั่ว 33/33/33 ≈ 0.667, ยิ่งต่ำยิ่งดี */
+  brier: number;
+};
+
+/**
+ * Calibration ของ AI — เทียบ "มั่นใจแค่ไหน" กับ "ถูกจริงแค่ไหน" นับเฉพาะคำทายที่โมเดลให้
+ * ความน่าจะเป็นไว้และออกผลแล้ว (ดู prob_* ใน ai_prediction_logs) เรียงจาก Brier ต่ำสุด
+ *
+ * "ถูก" คำนวณจากผลจริงของแมตช์ตรง ๆ (ไม่อ่าน points_awarded ของลีกใดลีกหนึ่ง) เพื่อให้ตรงกับ
+ * actual ที่ใช้คิด Brier เสมอ แม้ผลถูกแก้ย้อนหลังแล้วยังคิดคะแนนไม่ทัน — และหยิบ log ล่าสุด
+ * ใบเดียวต่อคำทาย เผื่อมีหลายแถว (หน้า reveal ก็ป้องกันแบบเดียวกัน)
+ */
+export async function getCalibration(
+  minPredictions = 5,
+): Promise<CalibrationRow[]> {
+  const rows = await sqlClient<
+    {
+      name: string | null;
+      agent_key: string | null;
+      total: number;
+      correct: number;
+      avg_confidence: string;
+      brier: string;
+    }[]
+  >`
+    with scored as (
+      select distinct on (p.id)
+        p.id, p.predicted_outcome::text as predicted,
+        case
+          when m.home_score > m.away_score then 'HOME'
+          when m.home_score < m.away_score then 'AWAY'
+          else 'DRAW'
+        end as actual
+      from prediction_scores ps
+      join predictions p on p.id = ps.prediction_id
+      join matches m on m.id = p.match_id
+      where m.home_score is not null and m.away_score is not null
+      order by p.id
+    ),
+    latest_log as (
+      select distinct on (prediction_id)
+        prediction_id, ai_agent_id, prob_home, prob_draw, prob_away
+      from ai_prediction_logs
+      where prediction_id is not null and parse_succeeded
+        and prob_home is not null and prob_draw is not null and prob_away is not null
+      order by prediction_id, created_at desc
+    )
+    select
+      coalesce(u.display_name, u.name) as name,
+      a.agent_key,
+      count(*)::int as total,
+      count(*) filter (where s.predicted = s.actual)::int as correct,
+      avg(case s.predicted
+        when 'HOME' then l.prob_home
+        when 'DRAW' then l.prob_draw
+        else l.prob_away
+      end) as avg_confidence,
+      avg(
+        power(l.prob_home / 100.0 - (s.actual = 'HOME')::int, 2)
+        + power(l.prob_draw / 100.0 - (s.actual = 'DRAW')::int, 2)
+        + power(l.prob_away / 100.0 - (s.actual = 'AWAY')::int, 2)
+      ) as brier
+    from scored s
+    join latest_log l on l.prediction_id = s.id
+    join ai_agents a on a.id = l.ai_agent_id
+    join users u on u.id = a.user_id
+    group by u.id, u.display_name, u.name, a.agent_key
+    having count(*) >= ${minPredictions}
+    order by brier asc
+  `;
+
+  return rows.map((row) => ({
+    name: row.name,
+    agentKey: row.agent_key,
+    total: row.total,
+    correct: row.correct,
+    avgConfidence: Math.round(Number(row.avg_confidence)),
+    accuracy: Math.round((row.correct / row.total) * 100),
+    brier: Math.round(Number(row.brier) * 1000) / 1000,
+  }));
+}
+
 export type UpsetMatch = {
   homeTeam: string;
   awayTeam: string;

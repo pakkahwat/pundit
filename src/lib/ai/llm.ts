@@ -12,14 +12,37 @@ import {
   type PredictionOutcome,
 } from "../predictions/outcome";
 import type { FormEntry, MatchContext } from "./context";
+import {
+  normalizeProbabilities,
+  type OutcomeProbabilities,
+} from "./probabilities";
 
 // schema ที่บังคับให้โมเดลตอบกลับมาเป็นโครงสร้างนี้เท่านั้น — generateObject จะ retry ให้เองถ้า
 // โมเดลตอบผิดรูป เลยไม่ต้องเขียนโค้ด parse ข้อความดิบ ๆ หรือ regex งม JSON เอง
+//
+// ความน่าจะเป็นสามช่องต้องเป็น required ทั้งหมด — Groq ใช้ strict JSON schema แบบ OpenAI ซึ่งปฏิเสธ
+// ทั้ง call ถ้ามี property ที่ไม่อยู่ใน required (เจอจริง 14 ก.ย. 2026: "The following properties
+// must be listed in required: probAway, probDraw, probHome" พัง 8 นัดต่อ agent ในรอบเดียว)
+// และจงใจไม่ใส่ .min/.max เพราะไม่ทุก provider รองรับ keyword พวกนั้นใน strict mode —
+// normalizeProbabilities กรองค่าเสีย (ติดลบ/NaN) และปรับสเกลให้รวม 100 เองอยู่แล้ว
+// เส้นทาง repairText (โมเดลตอบผิดรูป กู้ได้แค่ผลกับเหตุผล) ส่ง 0/0/0 ซึ่ง normalize ตีความว่า
+// "ไม่มีข้อมูล" (ผลรวมศูนย์ -> null) ไม่ใช่การแต่งตัวเลขขึ้นมา
 const predictionSchema = z.object({
   outcome: z.enum(
     PREDICTION_OUTCOMES as [PredictionOutcome, ...PredictionOutcome[]],
   ),
   reasoning: z.string().describe("เหตุผลสั้น ๆ ไม่เกิน 2 ประโยค เป็นภาษาไทย"),
+  probHome: z
+    .number()
+    .describe("ความน่าจะเป็น (%) ที่ทีมเหย้าชนะ — จำนวนเต็ม 0-100"),
+  probDraw: z
+    .number()
+    .describe("ความน่าจะเป็น (%) ที่เสมอ — จำนวนเต็ม 0-100"),
+  probAway: z
+    .number()
+    .describe(
+      "ความน่าจะเป็น (%) ที่ทีมเยือนชนะ — จำนวนเต็ม 0-100 (สามช่องรวมกันต้องได้ 100)",
+    ),
 });
 
 const SYSTEM_PROMPT = `คุณเป็นนักวิเคราะห์ฟุตบอลพรีเมียร์ลีก หน้าที่คือทายว่าแมตช์ที่กำหนดจะจบด้วยผลใด
@@ -29,7 +52,11 @@ const SYSTEM_PROMPT = `คุณเป็นนักวิเคราะห์
 หรือผลการแข่งขันที่ไม่ได้อยู่ในข้อมูลนี้ เพราะข้อมูลนั้นอาจเป็นเหตุการณ์ที่ยังไม่เกิดขึ้น ณ เวลาที่ทาย
 ให้วิเคราะห์จากฟอร์มล่าสุด สถิติการเจอกัน ตารางคะแนน และความได้เปรียบของการเล่นในบ้านเท่านั้น
 
-อย่าเลี่ยงตอบ DRAW เพื่อความปลอดภัย ถ้าข้อมูลชี้ชัดว่าฝ่ายใดเหนือกว่าให้ฟันธงไปเลย`;
+อย่าเลี่ยงตอบ DRAW เพื่อความปลอดภัย ถ้าข้อมูลชี้ชัดว่าฝ่ายใดเหนือกว่าให้ฟันธงไปเลย
+
+นอกจากผลที่เลือก ให้ประเมินความน่าจะเป็นของทั้งสามผลเป็นเปอร์เซ็นต์ (probHome, probDraw, probAway
+รวมกันได้ 100) ตามความมั่นใจจริงของคุณ — นัดที่ข้อมูลชี้ชัดควรให้ตัวเลขห่างกันมาก นัดที่สูสีควรให้
+ใกล้กัน ห้ามใส่ตัวเลขกลาง ๆ เท่ากันหมดทุกนัด และผลที่เลือก (outcome) ควรเป็นผลที่ให้เปอร์เซ็นต์สูงสุด`;
 
 function formLine(entries: FormEntry[]): string {
   if (entries.length === 0) return "ไม่มีข้อมูล";
@@ -76,6 +103,8 @@ ${standingsLines || "ยังไม่มีข้อมูล"}
 export type LlmPredictionResult = {
   outcome: PredictionOutcome;
   reasoning: string;
+  /** null ถ้าโมเดลไม่ให้ตัวเลขหรือให้มาใช้ไม่ได้ (ดู normalizeProbabilities) */
+  probabilities: OutcomeProbabilities | null;
   prompt: string;
   latencyMs: number;
 };
@@ -151,7 +180,14 @@ function repairPredictionText(text: string): string | null {
     .trim()
     .slice(0, 1000);
 
-  return JSON.stringify({ outcome, reasoning });
+  // 0/0/0 = ไม่มีข้อมูลความน่าจะเป็น (ดูคอมเมนต์ที่ predictionSchema)
+  return JSON.stringify({
+    outcome,
+    reasoning,
+    probHome: 0,
+    probDraw: 0,
+    probAway: 0,
+  });
 }
 
 // เรียก LLM ให้ทายผล — API key อ่านจาก env เท่านั้น (ห้าม hardcode)
@@ -195,6 +231,7 @@ export async function llmPredict(
   return {
     outcome: object.outcome,
     reasoning: object.reasoning,
+    probabilities: normalizeProbabilities(object),
     prompt,
     latencyMs: Date.now() - startedAt,
   };

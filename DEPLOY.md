@@ -52,6 +52,7 @@ Remove-Item Env:DATABASE_URL    # อย่าลืมล้างค่า ไ
 | `PEXELS_API_KEY`               | API key จาก pexels.com/api — ภาพสำรองของหน้าปกบทความ (ฟรี 200 req/ชม.)                    |
 | `ADMIN_EMAILS`                 | อีเมลที่เข้าหน้า /admin ได้ คั่นด้วย , — ไม่ตั้ง = ไม่มีใครเข้าได้เลย                        |
 | `CRON_SECRET`                  | สุ่มใหม่ยาว ๆ (`openssl rand -hex 32`) — ใช้ยืนยันตัวตนของ cron                          |
+| `OPS_DISCORD_WEBHOOK_URL`      | webhook ของช่องส่วนตัวผู้ดูแล — แจ้งตอน cron พัง/sync เงียบนาน/AI โดนวงจรตัด และตอนหาย (ไม่ตั้ง = ไม่แจ้ง) |
 
 สองอย่างนี้พลาดแล้วไม่มี error ให้เห็น จึงต้องเช็คด้วยตาเอง:
 
@@ -78,6 +79,19 @@ Remove-Item Env:DATABASE_URL
 
 คำสั่ง seed จะสร้าง/อัปเดตผู้เล่น AI ตามลิสต์ใน scripts/seed-ai-agents.ts (ตัวที่ถูกถอด
 จากลิสต์จะถูกปิดใช้งานอัตโนมัติ) ส่วนคำสั่ง join จะเพิ่มตัวใหม่เข้า league เดิมที่มีอยู่แล้ว
+
+### migrations ที่ต้องรันเมื่ออัปเดตโค้ด (idempotent รันซ้ำได้)
+
+ทุกครั้งที่ deploy เวอร์ชันที่แก้ schema ให้ชี้ `DATABASE_URL` ไป prod แล้วรันสคริปต์ migrate
+ที่เกี่ยวข้อง **ก่อน** deploy ไม่งั้น query ใหม่จะพังเพราะไม่มีคอลัมน์ (โค้ดฝั่ง ops alerts กลืน error
+ให้ แต่ AI ทายผล/บทความไม่กลืน)
+
+| อัปเดต 14 ก.ย. 2026 | คำสั่ง |
+| --- | --- |
+| % ความมั่นใจของ AI (`ai_prediction_logs.prob_*`) | `npm run db:migrate-ai-confidence` |
+| แจ้งเตือนระบบพังเข้า Discord (`ops_alerts`) | `npm run db:migrate-ops-alerts` |
+| บทความพรีวิวก่อนแมตช์เดย์ (`articles.kind/matchday` + unique ใหม่) | `npm run db:migrate-article-kinds` |
+| ผู้เล่น "สภา AI" | `npm run db:seed-ai-agents` แล้ว `npm run db:join-ai-agents-to-leagues` |
 
 ---
 
@@ -122,6 +136,18 @@ Authorization: Bearer <ค่า CRON_SECRET ที่ตั้งไว้บ�
 | คิดคะแนน    | `https://pundit.devda.fyi/api/cron/score`          | ทุก 30 นาที (หลัง sync) |
 | AI ทายผล    | `https://pundit.devda.fyi/api/cron/ai-predictions` | ทุก 15 นาที             |
 | เขียนบทความ | `https://pundit.devda.fyi/api/cron/article`        | วันละครั้ง 08:00        |
+| แจ้งเตือนลีก | `https://pundit.devda.fyi/api/cron/notify`         | ทุก 15 นาที             |
+
+งาน `article` เขียนทั้งคอลัมน์ประจำวัน (ลีกละบท) และ **พรีวิวก่อนแมตช์เดย์** ให้เองเมื่อเหลือไม่ถึง
+48 ชม.ก่อนนัดแรกที่ยังไม่เตะ (แมตช์เดย์ละบท กันซ้ำที่ระดับ DB) ไม่ต้องตั้ง job แยก — ยิงวันละครั้งตอนเช้า
+ก็ครอบคลุม ส่วนงาน `notify` โพสต์เข้า Discord ของแต่ละลีกตามกติกาใน `src/lib/jobs/notify.ts`
+(เตือนก่อนปิดรับ, เปิดคำทาย, จ่าฝูงเปลี่ยน, AI เห็นต่าง, สรุปแมตช์เดย์, บทความใหม่)
+
+**แจ้งเตือนระบบพังเงียบ** (ต่างจาก `notify` ที่เป็นของลีก): ตั้ง `OPS_DISCORD_WEBHOOK_URL` เป็น webhook
+ของช่องส่วนตัวผู้ดูแล ระบบจะโพสต์เมื่อ cron งานไหนเริ่มพัง, `sync_results`/`run_ai_predictions`
+ไม่ได้รันสำเร็จมานาน (cron-job.org ปิด job อัตโนมัติเมื่อล้มติดกัน) หรือผู้เล่น AI ตัวไหนพังติดต่อกัน
+จนวงจรตัด — และโพสต์อีกครั้งตอนกลับมาปกติ ส่งเฉพาะตอนสถานะเปลี่ยน ไม่สแปม (ตาราง `ops_alerts`)
+ข้อจำกัด: ถ้า cron โดนปิด *ทุกงาน* พร้อมกันจะไม่มีใครฟ้อง ต้องใช้ uptime monitor ข้างนอกเพิ่ม
 
 **ทำไม AI ทายผลต้องถี่ถึง 15 นาที** — Vercel Hobby จำกัดฟังก์ชันที่ 60 วินาที แต่การให้ AI ทาย
 10 นัดต้องเว้นระยะตาม rate limit ของ Gemini ฟรี ทำไม่ทันในรอบเดียว งานจึงถูกออกแบบให้ทำเท่าที่ทัน

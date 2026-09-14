@@ -104,6 +104,10 @@ async function main() {
   console.log(`\nผลลัพธ์: ${result.outcome}`);
   console.log(`เหตุผล: ${result.reasoning}`);
   console.log(`ใช้เวลา: ${result.latencyMs}ms`);
+  const p = result.probabilities;
+  console.log(
+    `ความน่าจะเป็น: ${p ? `เหย้า ${p.HOME}% · เสมอ ${p.DRAW}% · เยือน ${p.AWAY}%` : "โมเดลไม่ให้ตัวเลข (เก็บเป็น null)"}`,
+  );
   console.log(
     `\n(เคสนี้ Arsenal ฟอร์มดีกว่าชัดเจนและเป็นเจ้าบ้าน — ถ้าโมเดลตอบ HOME แปลว่าทำงานปกติ)`,
   );

@@ -5,9 +5,12 @@ import { z } from "zod";
 import {
   DEFAULT_ARTICLE_COVER_IMAGES,
   buildStorySeeds,
+  formatPreviewSource,
   parseRssItems,
   rotateSeedOrder,
   type ArticleSource,
+  type PreviewFixture,
+  type PreviewSource,
 } from "./article-source";
 import { getCurrentMatchday } from "@/lib/matches/current-matchday";
 
@@ -30,7 +33,24 @@ const articleSchema = z.object({
     .describe(
       "เนื้อหาภาษาไทยแบบ markdown ความยาว 3-5 ย่อหน้า เขียนเป็นความเรียง ห้ามใช้ bullet point",
     ),
+  // สองช่องนี้ใช้ทำภาพหน้าปกให้ตรงเรื่อง — โมเดลรู้ดีที่สุดว่าบทความเล่าถึงใคร/ฉากไหน
+  // เป็น optional เพราะไม่คุ้มที่จะให้บทความทั้งใบล้มเพียงเพราะขาดข้อมูลประกอบภาพ
+  focusTeams: z
+    .array(z.string())
+    .max(2)
+    .optional()
+    .describe(
+      "ทีมหลักที่บทความพูดถึง (ไม่เกิน 2 ทีม ถ้าเป็นแมตช์ให้เหย้าก่อนเยือน) ใช้ชื่อตามข้อมูลที่ให้มาเป๊ะ ๆ",
+    ),
+  imageQuery: z
+    .string()
+    .optional()
+    .describe(
+      "คำบรรยายฉากภาพประกอบเป็นภาษาอังกฤษ 4-8 คำ สำหรับค้นภาพสต็อก เช่น 'players celebrating late goal floodlights' ห้ามมีชื่อทีมหรือชื่อคน",
+    ),
 });
+
+export type GeneratedArticle = z.infer<typeof articleSchema>;
 
 const SYSTEM_PROMPT = `คุณเป็นนักเขียนคอลัมน์ฟุตบอลของเว็บ "Pundit" สำหรับทุกลีกที่มีในระบบ
 ที่มีทั้งคนจริงและ AI แข่งทายผลกัน หน้าที่ของคุณคือเขียนบทความประจำวันสำหรับลีกนี้จากข้อมูลที่ได้รับ
@@ -64,7 +84,169 @@ const SYSTEM_PROMPT = `คุณเป็นนักเขียนคอลั
 อย่าต้องพูดทุกตัวเลขทุกวัน และไม่ควรเล่าแบบเดียวกันทุกครั้ง
 
 น้ำเสียง: เป็นกันเอง สนุก มีอารมณ์ขันบ้าง แบบคอลัมนิสต์ฟุตบอลคุยกับเพื่อน ไม่ใช่รายงานข่าวแห้ง ๆ
-ถ้ามีประเด็นที่ AI ทายพลาดหรือทายแม่นกว่าคน ให้หยิบมาเล่นเป็นสีสันได้ เพราะนั่นคือจุดขายของเว็บนี้`;
+ถ้ามีประเด็นที่ AI ทายพลาดหรือทายแม่นกว่าคน ให้หยิบมาเล่นเป็นสีสันได้ เพราะนั่นคือจุดขายของเว็บนี้
+
+ภาพประกอบ: นอกจากบทความ ให้ระบุ focusTeams (ทีมหลักที่บทความเล่าถึง ไม่เกิน 2 ทีม ถ้าเป็นเรื่องแมตช์ให้
+เหย้าก่อนเยือน ใช้ชื่อตามข้อมูลเป๊ะ ๆ) และ imageQuery (คำบรรยายฉากภาพเป็นภาษาอังกฤษ 4-8 คำ ที่ตรงกับ
+อารมณ์ของเรื่อง ห้ามมีชื่อทีมหรือชื่อคน)`;
+
+// ── พรีวิวก่อนแมตช์เดย์ ───────────────────────────────────────────────────────
+//
+// กติกาที่ต่างจากคอลัมน์ประจำวันและสำคัญที่สุด: **ห้ามฟันธงผลหรือชี้นำว่าควรทายอะไร** บทความออกก่อน
+// คิกออฟ ถ้าคอลัมน์บอกว่า "อาร์เซนอลน่าจะชนะ" คนก็ทายตาม แล้วคำถามวิจัย "คนแม่นกว่า AI ไหม" จะ
+// ตอบไม่ได้ (และข้อมูลที่ให้ก็ไม่มีคำทายของ AI ตัวไหนอยู่แล้ว — ดู buildPreviewSource)
+const PREVIEW_SYSTEM_PROMPT = `คุณเป็นนักเขียนคอลัมน์ฟุตบอลของเว็บ "Pundit" ที่มีทั้งคนจริงและ AI แข่งทายผลกัน
+หน้าที่ของคุณคือเขียน "พรีวิวก่อนแมตช์เดย์" ของลีกนี้จากข้อมูลที่ได้รับ
+
+กฎเหล็ก: เขียนได้เฉพาะสิ่งที่อยู่ในข้อมูลที่ให้มาเท่านั้น ห้ามเพิ่มข้อเท็จจริงใด ๆ จากความรู้ของคุณเอง
+ไม่ว่าจะเป็นชื่อนักเตะ อาการบาดเจ็บ ข่าวย้ายทีม คำพูดของโค้ช หรือสถิติที่ไม่ได้ระบุไว้
+
+ห้ามฟันธงผล ห้ามบอกว่าทีมไหน "น่าจะชนะ" และห้ามแนะนำว่าควรทายนัดไหนเป็นอะไร — ผู้อ่านคือคนที่กำลังจะ
+ทายผลแข่งกับ AI ถ้าคอลัมน์ชี้นำ การแข่งขันจะไม่ยุติธรรม ให้เล่า "สิ่งที่น่าจับตา" แทน: ฟอร์มล่าสุด
+อันดับและแต้มที่ห่างกัน สถิติการเจอกัน เวลาเตะ แล้วปล่อยให้ผู้อ่านตัดสินใจเอง
+
+โครงเรื่อง: เปิดด้วยภาพรวมของแมตช์เดย์หนึ่งย่อหน้า → เจาะคู่ที่น่าสนใจที่สุด 2-3 คู่ คู่ละหนึ่งย่อหน้า
+(ระบุวันเวลาเตะตามเวลาไทยที่ให้มา) → ปิดด้วยสีสันจากสถานการณ์ในลีกทายผล 1-2 ประโยคถ้ามีข้อมูล
+ความยาว 3-5 ย่อหน้า เขียนเป็นความเรียง ห้ามใช้ bullet point พาดหัวควรบอกให้รู้ว่าเป็นพรีวิวและเอ่ยถึงคู่เด่น
+
+น้ำเสียง: เป็นกันเอง สนุก ตื่นเต้นแบบคนรอดูบอลสุดสัปดาห์ ไม่ใช่รายงานข่าวแห้ง ๆ
+ในพาดหัวและเนื้อหาให้เรียกทีมด้วยชื่อไทยที่แฟนบอลไทยคุ้นเคย (เช่น ลิเวอร์พูล, แมนฯ ยูไนเต็ด, บาร์เซโลนา)
+ไม่ใช่ชื่อทางการภาษาอังกฤษแบบ "Manchester United FC"
+
+ภาพประกอบ: ระบุ focusTeams = สองทีมของคู่เด่นที่พาดหัวพูดถึง (เหย้าก่อน เยือนหลัง — ช่องนี้ช่องเดียว
+ที่ต้องใช้ชื่อภาษาอังกฤษตามข้อมูลเป๊ะ ๆ) และ imageQuery = คำบรรยายฉากภาพเป็นภาษาอังกฤษ 4-8 คำ
+ห้ามมีชื่อทีมหรือชื่อคน`;
+
+// ข้อมูลพรีวิว: โปรแกรม ฟอร์ม อันดับ h2h ของแมตช์เดย์ที่กำลังจะมาถึง — ทุกอย่างมาจากนัดที่จบแล้วเท่านั้น
+// และ **ไม่มีคำทายของ AI** (predictorAccuracy นับจาก prediction_scores ซึ่งมีเฉพาะนัดที่จบแล้ว)
+export async function buildPreviewSource(
+  sql: postgres.Sql,
+  seasonId: string,
+  matchday: number,
+  today: string,
+): Promise<PreviewSource> {
+  const [season] = await sql<{ name: string }[]>`
+    select name from seasons where id = ${seasonId}
+  `;
+
+  const [fixtureRows, finished, standingsRows, accuracy] = await Promise.all([
+    // เฉพาะนัดที่ยังไม่เตะ — แมตช์เดย์เดียวกันอาจมีนัดที่เตะไปแล้ว (นัดเปิดวันศุกร์, นัดเลื่อน)
+    // ถ้าส่งไปด้วย โมเดลจะเขียน "จับตาคู่นี้" ให้เกมที่จบไปแล้ว (เจอจริงตอนทดสอบ)
+    sql<{ home_team: string; away_team: string; kickoff_at: string | Date }[]>`
+      select ht.name as home_team, at.name as away_team, m.kickoff_at
+      from matches m
+      join teams ht on ht.id = m.home_team_id
+      join teams at on at.id = m.away_team_id
+      where m.season_id = ${seasonId} and m.matchday = ${matchday}
+        and m.kickoff_at > now()
+      order by m.kickoff_at
+    `,
+    sql<
+      {
+        home_team: string;
+        away_team: string;
+        home_score: number;
+        away_score: number;
+      }[]
+    >`
+      select ht.name as home_team, at.name as away_team, m.home_score, m.away_score
+      from matches m
+      join teams ht on ht.id = m.home_team_id
+      join teams at on at.id = m.away_team_id
+      where m.season_id = ${seasonId}
+        and m.status = 'FINISHED'
+        and m.home_score is not null and m.away_score is not null
+      order by m.kickoff_at desc
+    `,
+    sql<{ team: string; played: number; points: number; gd: number }[]>`
+      with team_matches as (
+        select home_team_id as team_id, home_score as gf, away_score as ga,
+          case when home_score > away_score then 3 when home_score = away_score then 1 else 0 end as pts
+        from matches where season_id = ${seasonId} and status = 'FINISHED'
+        union all
+        select away_team_id as team_id, away_score as gf, home_score as ga,
+          case when away_score > home_score then 3 when away_score = home_score then 1 else 0 end as pts
+        from matches where season_id = ${seasonId} and status = 'FINISHED'
+      )
+      select t.name as team, count(*)::int as played, sum(pts)::int as points,
+        sum(gf - ga)::int as gd
+      from team_matches tm
+      join teams t on t.id = tm.team_id
+      group by t.id, t.name
+      order by points desc, gd desc
+    `,
+    sql<{ name: string | null; is_ai: boolean; scored: number; correct: number }[]>`
+      select coalesce(u.display_name, u.name) as name, u.player_kind = 'ai' as is_ai,
+        count(*)::int as scored,
+        count(*) filter (where ps.points_awarded > 0)::int as correct
+      from prediction_scores ps
+      join predictions p on p.id = ps.prediction_id
+      join matches m on m.id = p.match_id and m.season_id = ${seasonId}
+      join users u on u.id = p.user_id
+      group by u.id, u.name, u.display_name, u.player_kind
+      order by correct desc
+      limit 6
+    `,
+  ]);
+
+  const standing = new Map(
+    standingsRows.map((s, i) => [s.team, { rank: i + 1, points: s.points }]),
+  );
+  const formOf = (team: string) =>
+    finished
+      .filter((m) => m.home_team === team || m.away_team === team)
+      .slice(0, 5)
+      .map((m) => {
+        const gf = m.home_team === team ? m.home_score : m.away_score;
+        const ga = m.home_team === team ? m.away_score : m.home_score;
+        return gf > ga ? "W" : gf === ga ? "D" : "L";
+      })
+      .join(" ");
+  const headToHead = (a: string, b: string) =>
+    finished
+      .filter(
+        (m) =>
+          (m.home_team === a && m.away_team === b) ||
+          (m.home_team === b && m.away_team === a),
+      )
+      .slice(0, 3)
+      .map((m) => `${m.home_team} ${m.home_score}-${m.away_score} ${m.away_team}`)
+      .join(" · ");
+
+  const fixtures: PreviewFixture[] = fixtureRows.map((f) => ({
+    homeTeam: f.home_team,
+    awayTeam: f.away_team,
+    kickoffAt: new Date(f.kickoff_at).toISOString(),
+    homeForm: formOf(f.home_team),
+    awayForm: formOf(f.away_team),
+    homeRank: standing.get(f.home_team)?.rank ?? null,
+    awayRank: standing.get(f.away_team)?.rank ?? null,
+    homePoints: standing.get(f.home_team)?.points ?? null,
+    awayPoints: standing.get(f.away_team)?.points ?? null,
+    headToHead: headToHead(f.home_team, f.away_team),
+  }));
+
+  return {
+    kind: "preview",
+    date: today,
+    seasonName: season?.name ?? "Premier League",
+    matchday,
+    fixtures,
+    standings: standingsRows.slice(0, 6).map((s, i) => ({
+      rank: i + 1,
+      team: s.team,
+      played: s.played,
+      points: s.points,
+      goalDiff: s.gd,
+    })),
+    predictorAccuracy: accuracy.map((a) => ({
+      name: a.name,
+      isAi: a.is_ai,
+      scored: a.scored,
+      correct: a.correct,
+    })),
+  };
+}
 
 
 async function fetchExternalNews(
@@ -320,7 +502,11 @@ ${externalNews}
 ${storyOptions}`;
 }
 
-export async function generateArticle(modelId: string, src: ArticleSource) {
+async function writeWithModel(
+  modelId: string,
+  system: string,
+  prompt: string,
+): Promise<GeneratedArticle> {
   const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
   if (!apiKey) {
     throw new Error("Missing GOOGLE_GENERATIVE_AI_API_KEY ใน .env.local");
@@ -330,11 +516,30 @@ export async function generateArticle(modelId: string, src: ArticleSource) {
   const { object } = await generateObject({
     model: google(modelId),
     schema: articleSchema,
-    system: SYSTEM_PROMPT,
-    prompt: formatSource(src),
+    system,
+    prompt,
     abortSignal: AbortSignal.timeout(90_000),
     maxRetries: 5,
   });
 
   return object;
+}
+
+export function generateArticle(modelId: string, src: ArticleSource) {
+  return writeWithModel(modelId, SYSTEM_PROMPT, formatSource(src));
+}
+
+// stricter = รอบเขียนใหม่หลังจับได้ว่าฉบับแรกชี้นำผล (ดู looksLikeTip ใน jobs/article.ts)
+export function generatePreviewArticle(
+  modelId: string,
+  src: PreviewSource,
+  options: { stricter?: boolean } = {},
+) {
+  const system = options.stricter
+    ? `${PREVIEW_SYSTEM_PROMPT}
+
+คำเตือน: ฉบับก่อนหน้ามีประโยคฟันธงหรือชี้นำผล ห้ามใช้คำว่า "ฟันธง" "ทายว่า" "ควรทาย" "น่าจะชนะ" "ตัวเต็ง"
+หรือประโยคใด ๆ ที่บอกว่าทีมไหนจะชนะ/เก็บแต้ม/เอาชนะได้ โดยเด็ดขาด เล่าได้แค่ข้อมูลและสิ่งที่น่าจับตา`
+    : PREVIEW_SYSTEM_PROMPT;
+  return writeWithModel(modelId, system, formatPreviewSource(src));
 }

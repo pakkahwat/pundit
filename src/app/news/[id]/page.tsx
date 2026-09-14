@@ -40,6 +40,9 @@ export default async function ArticlePage({ params }: { params: Promise<{ id: st
       <Card>
         <div className="flex items-center gap-2">
           <p className="text-xs text-muted">{formatArticleDate(article.publishedOn)}</p>
+          {article.kind === 'preview' && (
+            <Badge tone="accent">พรีวิวแมตช์เดย์ {article.matchday ?? ''}</Badge>
+          )}
           <Badge tone="accent">เขียนโดย AI</Badge>
         </div>
         <h1 className="mt-1 mb-4 font-display text-2xl font-semibold tracking-tight text-foreground">

@@ -13,6 +13,7 @@ import {
   SectionLabel,
 } from "@/components/ui";
 import {
+  getCalibration,
   getConditionBreakdown,
   getUpsetMatches,
 } from "@/lib/stats/ai-insights";
@@ -34,8 +35,9 @@ export default async function AiInsightsPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/");
 
-  const [breakdown, upsets] = await Promise.all([
+  const [breakdown, calibration, upsets] = await Promise.all([
     getConditionBreakdown(),
+    getCalibration(),
     getUpsetMatches(),
   ]);
 
@@ -118,8 +120,75 @@ export default async function AiInsightsPage() {
           </Card>
         )}
         <p className="mt-2 text-xs text-muted">
-          ตัวเลขในวงเล็บ = จำนวนนัด · "กล้าทายเสมอ" สำคัญเพราะเสมอเกิดจริงราว 1 ใน 4
+          ตัวเลขในวงเล็บ = จำนวนนัด · “กล้าทายเสมอ” สำคัญเพราะเสมอเกิดจริงราว 1 ใน 4
           แต่ผู้ทายส่วนใหญ่แทบไม่กล้าเลือก — ใครเลี่ยงเสมอตลอดจะเสียแต้มกลุ่มนี้ทั้งก้อน
+        </p>
+      </section>
+
+      <section className="mb-8">
+        <SectionLabel>ความมั่นใจ vs ความแม่นจริง (calibration ของ AI)</SectionLabel>
+        {calibration.length === 0 ? (
+          <EmptyState>
+            ยังไม่มีคำทายที่ AI ให้ % ความมั่นใจไว้และออกผลแล้ว — จะเริ่มมีหลังแมตช์เดย์ถัดไป
+          </EmptyState>
+        ) : (
+          <Card padded={false} className="overflow-x-auto">
+            <table className="w-full min-w-[36rem] text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-xs text-muted">
+                  <th className="p-3 font-medium">AI</th>
+                  <th className="p-3 font-medium">นัด</th>
+                  <th className="p-3 font-medium">มั่นใจเฉลี่ย</th>
+                  <th className="p-3 font-medium">แม่นจริง</th>
+                  <th className="p-3 font-medium" title="มั่นใจเฉลี่ย − แม่นจริง: บวก = มั่นใจเกินตัว ลบ = ถ่อมตัว">
+                    ส่วนต่าง
+                  </th>
+                  <th className="p-3 font-medium" title="ยิ่งต่ำยิ่งดี: 0 = สมบูรณ์แบบ, ทายมั่วเท่ากันสามทาง ≈ 0.667">
+                    Brier
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {calibration.map((row) => {
+                  const gap = row.avgConfidence - row.accuracy;
+                  return (
+                    <tr key={row.agentKey ?? row.name ?? ""}>
+                      <td className="p-3">
+                        <span className="flex items-center gap-2">
+                          <PlayerAvatar
+                            image={null}
+                            name={row.name}
+                            isAi
+                            agentKey={row.agentKey}
+                            size={22}
+                          />
+                          <span className="max-w-40 truncate">{row.name}</span>
+                        </span>
+                      </td>
+                      <td className="p-3 tabular-nums">{row.total}</td>
+                      <td className="p-3 tabular-nums">{row.avgConfidence}%</td>
+                      <td className="p-3 tabular-nums font-medium text-foreground">
+                        {row.accuracy}%
+                      </td>
+                      <td
+                        className={`p-3 tabular-nums ${
+                          gap > 10 ? "text-danger" : gap < -10 ? "text-accent" : "text-muted"
+                        }`}
+                      >
+                        {gap > 0 ? "+" : ""}
+                        {gap}
+                      </td>
+                      <td className="p-3 tabular-nums">{row.brier.toFixed(3)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </Card>
+        )}
+        <p className="mt-2 text-xs text-muted">
+          AI ที่ดีไม่ใช่แค่ทายถูกบ่อย แต่ต้อง “รู้ว่าตัวเองไม่รู้” — บอกมั่นใจ 80% ก็ควรถูกจริงราว 80%
+          ส่วนต่างเป็นบวกมาก = โม้ · Brier รวมทั้งสามผล ยิ่งต่ำยิ่งดี (ลุงสถิติไม่ให้ % จึงไม่อยู่ในตารางนี้)
         </p>
       </section>
 

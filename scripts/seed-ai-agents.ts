@@ -34,6 +34,17 @@ const AGENTS: AgentSeed[] = [
     systemPrompt: null,
   },
   {
+    // สภา AI — ทายตามเสียงข้างมากของ AI ตัวอื่นที่ทายนัดนั้นไปแล้ว ไม่เรียก LLM เอง
+    // (ตรรกะใน src/lib/ai/council.ts) ตอบคำถาม "รวมหัวกันแล้วแม่นกว่าตัวเดียวไหม"
+    // ลงมติหลังทุกตัวที่ยังทำงานได้ทายครบ หรือเมื่อเหลือ < 3 ชม.ก่อนคิกออฟและมี ≥ 2 เสียง
+    agentKey: "ai-council",
+    displayName: "สภา AI (โหวตเสียงข้างมาก)",
+    provider: null,
+    modelId: null,
+    strategy: "council",
+    systemPrompt: null,
+  },
+  {
     agentKey: "gemini-flash-lite",
     displayName: "เจ้าสายฟ้า (Gemini Flash Lite)",
     provider: "google",

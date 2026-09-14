@@ -8,11 +8,22 @@ import {
   isCircuitTripped,
 } from "@/lib/ai/circuit";
 import { buildMatchContext, type MatchContext } from "@/lib/ai/context";
+import {
+  COUNCIL_STRATEGY,
+  councilShouldVote,
+  tallyCouncil,
+  type CouncilVote,
+} from "@/lib/ai/council";
 import { hasApiKey, llmPredict } from "@/lib/ai/llm";
 import {
   formatBaselineLogPrompt,
   formatLlmLogPrompt,
 } from "@/lib/ai/prediction-log";
+import {
+  normalizeProbabilities,
+  type OutcomeProbabilities,
+} from "@/lib/ai/probabilities";
+import { reportOps } from "@/lib/notify/ops";
 import { guardedUpsertPrediction } from "@/lib/predictions/guarded-upsert";
 import type { PredictionOutcome } from "@/lib/predictions/outcome";
 import { getCurrentMatchdays } from "@/lib/matches/current-matchday";
@@ -28,27 +39,56 @@ type AgentRow = {
   id: string;
   user_id: string;
   agent_key: string;
+  display_name: string;
   strategy: string;
   provider: string | null;
   model_id: string | null;
   system_prompt: string | null;
 };
 
+type PredictionResult = {
+  outcome: PredictionOutcome;
+  prompt: string;
+  reasoning: string;
+  latencyMs: number | null;
+  probabilities: OutcomeProbabilities | null;
+};
+
 // probe = ยิงหยั่งเชิงของ agent ที่วงจรตัด (ดู lib/ai/circuit.ts) — retry แค่ครั้งเดียว เพราะจุดประสงค์
 // คือเช็คว่า "ยังพังอยู่ไหม" ด้วยราคาถูก แต่ยังเผื่อ 503 ชั่วคราวของ free tier ไว้หนึ่งจังหวะ
 // (ถ้าไม่ retry เลย จังหวะแย่ครั้งเดียวจะทำให้ทั้งรอบของตัวนั้นถูกข้าม)
+// councilVotes = เสียงโหวตที่รวบรวมมาแล้วสำหรับ agent สภา (ผู้เรียกตัดสินใจไปแล้วว่าครบพอจะลงมติ)
 async function predictFor(
   agent: AgentRow,
   context: MatchContext,
-  options: { probe: boolean },
-) {
+  options: { probe: boolean; councilVotes?: CouncilVote[] },
+): Promise<PredictionResult> {
   if (agent.strategy === "static_form_based") {
     const { outcome, reasoning } = baselinePredict(context);
     return {
       outcome,
       prompt: formatBaselineLogPrompt({ outcome, reasoning }),
       reasoning,
-      latencyMs: null as number | null,
+      latencyMs: null,
+      // baseline ไม่ประเมินความน่าจะเป็น — เหตุผลของมันพิมพ์คะแนนดิบไว้อยู่แล้ว ไม่แต่งตัวเลขเพิ่ม
+      probabilities: null,
+    };
+  }
+
+  if (agent.strategy === COUNCIL_STRATEGY) {
+    const decision = tallyCouncil(options.councilVotes ?? []);
+    if (!decision) {
+      throw new Error(`สภา ${agent.agent_key} ไม่มีเสียงโหวตให้นับ`);
+    }
+    return {
+      outcome: decision.outcome,
+      prompt: formatBaselineLogPrompt({
+        outcome: decision.outcome,
+        reasoning: decision.reasoning,
+      }),
+      reasoning: decision.reasoning,
+      latencyMs: null,
+      probabilities: decision.probabilities,
     };
   }
 
@@ -77,13 +117,60 @@ async function predictFor(
         reasoning: result.reasoning,
       }),
       reasoning: result.reasoning,
-      latencyMs: result.latencyMs as number | null,
+      latencyMs: result.latencyMs,
+      probabilities: result.probabilities,
     };
   }
 
   throw new Error(
     `ไม่รู้จัก strategy '${agent.strategy}' ของ agent ${agent.agent_key}`,
   );
+}
+
+// รวบรวมคำทายของ AI ตัวอื่นสำหรับนัดหนึ่งให้สภา — อ่านทีละตัวภายใต้ user context ของเจ้าของ
+// คำทาย (RLS อนุญาต "เห็นของตัวเอง" ก่อนคิกออฟ) ไม่ได้ข้าม RLS และไม่ได้เปิดให้ใครอื่นเห็น
+// ความน่าจะเป็นอ่านจาก ai_prediction_logs (ไม่อยู่ใต้ RLS) ใช้เป็นตัวตัดสินเมื่อเสียงเท่ากัน
+async function collectCouncilVotes(
+  sql: postgres.Sql,
+  voters: AgentRow[],
+  matchId: string,
+): Promise<CouncilVote[]> {
+  const votes: CouncilVote[] = [];
+  for (const voter of voters) {
+    const rows = await withUserContextSql(
+      sql,
+      voter.user_id,
+      (tx) =>
+        tx<{ outcome: PredictionOutcome }[]>`
+        select predicted_outcome as outcome from predictions
+        where user_id = ${voter.user_id}::uuid and match_id = ${matchId}::uuid
+      `,
+    );
+    if (rows.length === 0) continue;
+
+    const [logRow] = await sql<
+      { prob_home: number | null; prob_draw: number | null; prob_away: number | null }[]
+    >`
+      select prob_home, prob_draw, prob_away from ai_prediction_logs
+      where ai_agent_id = ${voter.id} and match_id = ${matchId}::uuid
+        and parse_succeeded = true
+      order by created_at desc
+      limit 1
+    `;
+    votes.push({
+      agentKey: voter.agent_key,
+      displayName: voter.display_name,
+      outcome: rows[0].outcome,
+      probabilities: logRow
+        ? normalizeProbabilities({
+            probHome: logRow.prob_home,
+            probDraw: logRow.prob_draw,
+            probAway: logRow.prob_away,
+          })
+        : null,
+    });
+  }
+  return votes;
 }
 
 // ให้ AI ทายผลแมตช์ที่ยังไม่ล็อกและ "ยังไม่เคยทาย" — เขียนผ่าน guardedUpsertPrediction เส้นทาง
@@ -102,7 +189,7 @@ export async function runAiPredictions(
   const log = options.onLog ?? (() => {});
 
   const agents = await sql<AgentRow[]>`
-    select id, user_id, agent_key, strategy, provider, model_id, system_prompt
+    select id, user_id, agent_key, display_name, strategy, provider, model_id, system_prompt
     from ai_agents where is_active = true
     order by agent_key
   `;
@@ -162,15 +249,21 @@ export async function runAiPredictions(
   // ถ้าถามโดยไม่มี context เลย `not exists (...)` จะเป็นจริงเสมอ แปลว่า job จะคิดว่า "ยังไม่มีใครทาย"
   // ทุกครั้ง แล้วสั่ง LLM ทายซ้ำทุกนัดทุกรอบ cron — เผาโควตาฟรีทิ้งและทับคำทายเดิมไปเรื่อย ๆ
   // (จำนวน agent มีไม่กี่ตัว การยิงทีละตัวจึงถูกกว่าการเสีย LLM call มหาศาลมาก)
-  const pending: { agent_id: string; match_id: string; ko: string }[] = [];
+  const pending: {
+    agent_id: string;
+    match_id: string;
+    ko: string;
+    ko_epoch: number;
+  }[] = [];
   if (seasonIds.length) {
     for (const agent of usable) {
       const rows = await withUserContextSql(
         sql,
         agent.user_id,
         (tx) =>
-          tx<{ match_id: string; ko: string }[]>`
-          select m.id as match_id, m.kickoff_at::text as ko
+          tx<{ match_id: string; ko: string; ko_epoch: number }[]>`
+          select m.id as match_id, m.kickoff_at::text as ko,
+            extract(epoch from m.kickoff_at)::float8 as ko_epoch
           from matches m
           join unnest(${seasonIds}::uuid[], ${matchdayValues}::int[]) as cur(season_id, matchday)
             on cur.season_id = m.season_id and cur.matchday = m.matchday
@@ -182,24 +275,42 @@ export async function runAiPredictions(
         `,
       );
       for (const r of rows)
-        pending.push({ agent_id: agent.id, match_id: r.match_id, ko: r.ko });
+        pending.push({
+          agent_id: agent.id,
+          match_id: r.match_id,
+          ko: r.ko,
+          ko_epoch: r.ko_epoch,
+        });
     }
-    // เรียงตามเวลาคิกออฟเหมือนเดิม เพื่อให้นัดที่ใกล้ปิดรับที่สุดได้ทายก่อนถ้าทำไม่ทันในรอบเดียว
-    pending.sort(
-      (a, b) =>
-        a.ko.localeCompare(b.ko) || a.agent_id.localeCompare(b.agent_id),
-    );
   }
 
   const agentById = new Map(usable.map((a) => [a.id, a]));
+  // เรียงตามเวลาคิกออฟเหมือนเดิม เพื่อให้นัดที่ใกล้ปิดรับที่สุดได้ทายก่อนถ้าทำไม่ทันในรอบเดียว
+  // ในนัดเดียวกันให้สภาไปท้ายสุด — มันต้องรอเสียงของตัวอื่นที่ทายในรอบนี้ก่อนถึงจะนับโหวตได้
+  const isCouncil = (agentId: string) =>
+    agentById.get(agentId)?.strategy === COUNCIL_STRATEGY;
+  // เรียงด้วย epoch ไม่ใช่ข้อความของ timestamp — ข้อความเรียงตามเวลาได้ก็ต่อเมื่อ TimeZone ของ
+  // session ไม่มี DST เท่านั้น
+  pending.sort(
+    (a, b) =>
+      a.ko_epoch - b.ko_epoch ||
+      Number(isCouncil(a.agent_id)) - Number(isCouncil(b.agent_id)) ||
+      a.agent_id.localeCompare(b.agent_id),
+  );
   log(`เหลือให้ทาย ${pending.length} รายการ (agent x แมตช์)`);
+
+  const voters = usable.filter((a) => a.strategy !== COUNCIL_STRATEGY);
 
   let processed = 0;
   let failed = 0;
   let skippedByCircuit = 0;
+  let councilWaiting = 0;
   const lastCallAt = new Map<string, number>();
   // agent ที่หยั่งเชิงแล้วยังพัง — นัดที่เหลือของตัวนั้นในรอบนี้ข้ามเลย ไม่เรียก LLM ไม่บันทึก log
   const probeFailed = new Set<string>();
+  // ไว้รายงานสุขภาพราย agent เข้าช่อง ops ตอนจบรอบ (เฉพาะตัวที่ได้ทำงานจริงในรอบนี้)
+  const succeededAgents = new Set<string>();
+  const lastErrorByAgent = new Map<string, string>();
 
   for (const item of pending) {
     const agent = agentById.get(item.agent_id);
@@ -216,6 +327,23 @@ export async function runAiPredictions(
       break;
     }
 
+    // สภา: รวบรวมเสียงก่อน ถ้ายังไม่ครบพอจะลงมติก็ปล่อยค้างไว้ให้รอบถัดไป (ไม่ใช่ความล้มเหลว
+    // ไม่บันทึก log) — "ครบพอ" = ทุกตัวที่ยังทำงานได้ในรอบนี้ทายแล้ว หรือใกล้คิกออฟ (ดู council.ts)
+    let councilVotes: CouncilVote[] | undefined;
+    if (agent.strategy === COUNCIL_STRATEGY) {
+      councilVotes = await collectCouncilVotes(sql, voters, item.match_id);
+      const required = voters.filter(
+        (v) => !tripped.has(v.id) && !probeFailed.has(v.id),
+      ).length;
+      const msToKickoff = item.ko_epoch * 1000 - Date.now();
+      if (
+        !councilShouldVote({ votes: councilVotes.length, required, msToKickoff })
+      ) {
+        councilWaiting++;
+        continue;
+      }
+    }
+
     const context = await buildMatchContext(sql, item.match_id);
     const isLlm = agent.strategy === "llm";
     const probe = tripped.has(agent.id);
@@ -230,11 +358,8 @@ export async function runAiPredictions(
         lastCallAt.set(agent.provider, Date.now());
       }
 
-      const { outcome, prompt, reasoning, latencyMs } = await predictFor(
-        agent,
-        context,
-        { probe },
-      );
+      const { outcome, prompt, reasoning, latencyMs, probabilities } =
+        await predictFor(agent, context, { probe, councilVotes });
       llmAnswered = true;
       if (probe) {
         // สำเร็จครั้งเดียวก็พอ — ปลดวงจรแล้วทายนัดที่เหลือต่อในรอบนี้เลย ไม่ต้องรอรอบถัดไป
@@ -258,20 +383,24 @@ export async function runAiPredictions(
       await sql`
         insert into ai_prediction_logs (
           ai_agent_id, match_id, prediction_id, model_id, context_snapshot, prompt,
-          reasoning, latency_ms, parse_succeeded
+          reasoning, latency_ms, parse_succeeded, prob_home, prob_draw, prob_away
         )
         values (
           ${agent.id}, ${item.match_id}, ${predictionId}, ${agent.model_id},
-          ${JSON.stringify(context)}::jsonb, ${prompt}, ${reasoning}, ${latencyMs}, true
+          ${JSON.stringify(context)}::jsonb, ${prompt}, ${reasoning}, ${latencyMs}, true,
+          ${probabilities?.HOME ?? null}, ${probabilities?.DRAW ?? null}, ${probabilities?.AWAY ?? null}
         )
       `;
       processed++;
+      succeededAgents.add(agent.id);
       log(
         `  ${agent.agent_key}: ${context.homeTeam} vs ${context.awayTeam} -> ${outcome}` +
+          (probabilities ? ` (มั่นใจ ${probabilities[outcome]}%)` : "") +
           (latencyMs ? ` (${latencyMs}ms)` : ""),
       );
     } catch (err) {
       failed++;
+      lastErrorByAgent.set(agent.id, String(err));
       log(
         `  ${agent.agent_key}: แมตช์ ${item.match_id} ล้มเหลว — ${String(err)}`,
       );
@@ -299,12 +428,33 @@ export async function runAiPredictions(
       `ข้าม ${skippedByCircuit} รายการของ agent ที่วงจรตัด (จะลองใหม่รอบถัดไป)`,
     );
   }
+  if (councilWaiting > 0) {
+    log(`สภา AI รอเสียงโหวตอีก ${councilWaiting} นัด (ลงมติรอบถัดไปเมื่อครบ)`);
+  }
 
-  // remaining นับรวมรายการที่ข้ามด้วย — มันยังค้างอยู่จริงและรอบถัดไปจะหยิบมาหยั่งเชิงใหม่
+  // รายงานสุขภาพราย agent เข้าช่อง ops — ส่งเฉพาะตอนสถานะเปลี่ยน (ดู lib/notify/ops.ts)
+  // "down" = วงจรตัดและหยั่งเชิงไม่ผ่านในรอบนี้ (พังติดกัน 5+ ครั้ง ไม่ใช่สะดุดครั้งเดียว)
+  // "ok" = ทายสำเร็จอย่างน้อยหนึ่งนัดในรอบนี้ ตัวที่ไม่มีงานในรอบนี้ไม่แตะสถานะ
+  for (const agent of usable) {
+    if (probeFailed.has(agent.id)) {
+      await reportOps(
+        sql,
+        `agent:${agent.agent_key}`,
+        "down",
+        `${agent.display_name} พังติดต่อกันและหยั่งเชิงไม่ผ่าน (${agent.provider ?? agent.strategy}/${agent.model_id ?? "-"})\n${lastErrorByAgent.get(agent.id) ?? ""}`,
+        log,
+      );
+    } else if (succeededAgents.has(agent.id)) {
+      await reportOps(sql, `agent:${agent.agent_key}`, "ok", null, log);
+    }
+  }
+
+  // remaining นับรวมรายการที่ข้าม/รอด้วย — มันยังค้างอยู่จริงและรอบถัดไปจะหยิบขึ้นมาใหม่
   return {
     processed,
     failed,
     skipped: skippedByCircuit,
+    councilWaiting,
     remaining: pending.length - processed - failed,
   };
 }

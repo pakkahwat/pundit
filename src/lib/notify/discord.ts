@@ -61,4 +61,5 @@ export const COLOR = {
   accent: 0x22c55e,
   urgent: 0xf59e0b,
   neutral: 0x71717a,
+  danger: 0xef4444, // แจ้งเตือนระบบพัง (ช่อง ops) — แดงให้สะดุดตากว่าข้อความในลีก
 } as const;

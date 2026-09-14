@@ -13,9 +13,12 @@ config({ path: path.resolve(__dirname, '../.env.local') });
 //   npm run db:generate-article -- --force         เขียนทับของวันนี้ที่มีอยู่แล้ว
 //   npm run db:generate-article -- --date=2026-08-20   เขียนย้อนหลังของวันที่ระบุ
 //   npm run db:generate-article -- --days=6        เขียนย้อนหลัง 6 วัน (วันนี้ + 5 วันก่อนหน้า)
+//   npm run db:generate-article -- --preview       เขียนเฉพาะพรีวิวแมตช์เดย์ (ถ้าถึงเวลา) ใส่ --force เพื่อเขียนทับ
 //
 // --days มีไว้สำหรับสร้างข้อมูลทดสอบให้พอเห็น pagination เท่านั้น ไม่ได้ตั้งใจให้ใช้จริง
 // (เนื้อหาจะคล้ายกันมาก เพราะข้อมูลต้นทางใน DB เป็นชุดเดียวกัน ต่างแค่วันที่)
+// ทุกรอบ (ไม่ว่าจะระบุ --preview หรือไม่) จะลองเขียนพรีวิวด้วยเสมอเมื่อเหลือ < 48 ชม.ก่อนแมตช์เดย์
+// เหมือนที่ cron ทำ
 
 function argValue(name: string): string | undefined {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -40,6 +43,7 @@ async function main() {
   const { withCronRun } = await import('../src/lib/jobs/cron-run');
 
   const force = process.argv.includes('--force');
+  const previewOnly = process.argv.includes('--preview');
   const explicitDate = argValue('date');
   const days = Number(argValue('days') ?? 1);
 
@@ -54,16 +58,21 @@ async function main() {
 
   try {
     for (const date of dates) {
+      // พรีวิวอิง now() (แมตช์เดย์ปัจจุบัน/นัดที่ยังไม่เตะ) ไม่ใช่วันที่ระบุ — ทำเฉพาะรอบของ "วันนี้"
+      // ไม่งั้น --days=6 จะเขียนพรีวิวแมตช์เดย์เดิมซ้ำ 6 รอบ (6 LLM call) แล้วลงวันที่ย้อนหลังผิด ๆ
+      const isToday = date === bangkokDateOffset(0);
       const result = await withCronRun(sqlClient, 'generate_article', () =>
         runGenerateArticle(sqlClient, {
           force,
           date,
+          previewOnly,
+          skipPreview: !isToday,
           onLog: (m) => console.log(`[${date}] ${m}`),
         }),
       );
       // สรุปเป็นรายลีก เพราะตอนนี้เขียนลีกละหนึ่งบทต่อวัน ไม่ใช่บทเดียวทั้งระบบ
       console.log(
-        `[${date}] เขียนใหม่ ${result.processed} · ข้าม ${result.skipped} · ล้มเหลว ${result.failed}`,
+        `[${date}] เขียนใหม่ ${result.processed} · ข้าม ${result.skipped} · พรีวิว ${result.previews} · ล้มเหลว ${result.failed}`,
       );
       for (const title of result.titles) console.log(`         "${title}"`);
       if (result.skipped > 0 && result.processed === 0) {

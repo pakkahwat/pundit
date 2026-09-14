@@ -256,6 +256,11 @@ create table ai_prediction_logs (
   context_snapshot jsonb not null,                 -- feature ทั้งหมดที่ส่งให้โมเดล (ฟอร์ม, H2H, อันดับ, เหย้า/เยือน)
   prompt text not null,
   reasoning text,                                  -- เหตุผลที่โมเดลเลือกผลลัพธ์นี้
+  -- ความน่าจะเป็น (%) ของแต่ละผลที่โมเดลประเมินไว้ รวมกัน 100 — null ถ้าโมเดลไม่ให้/ให้มาใช้ไม่ได้
+  -- หรือเป็น agent ที่ไม่ประเมิน (baseline) ใช้วัด calibration ในหน้าเจาะลึก AI
+  prob_home smallint,
+  prob_draw smallint,
+  prob_away smallint,
   raw_response text,
   parsed_home_score smallint,
   parsed_away_score smallint,
@@ -276,6 +281,9 @@ create table articles (
   -- วันที่ของบทความ (ตามเวลาไทย) — unique กัน cron ยิงซ้ำแล้วได้บทความซ้ำวันเดียวกัน
   -- เป็นกลไก idempotent เดียวกับที่ใช้ทั้งโปรเจกต์: กันซ้ำที่ระดับ constraint ไม่ใช่ที่โค้ด
   published_on date not null,
+  -- 'daily' = คอลัมน์ประจำวัน · 'preview' = พรีวิวก่อนแมตช์เดย์ (เขียนเมื่อเหลือ < 48 ชม.ก่อนนัดแรก)
+  kind text not null default 'daily',
+  matchday integer,                    -- เฉพาะ preview: แมตช์เดย์ที่พรีวิว (กันซ้ำด้วย partial index ข้างล่าง)
   title text not null,
   body text not null,                  -- markdown ธรรมดา
   -- โลโก้ทีมที่ถูกพูดถึงในบทความ ใช้ทำภาพหน้าปกการ์ด — เก็บ URL ที่ sync มาจาก football-data.org
@@ -283,10 +291,13 @@ create table articles (
   cover_image_urls text[] not null default '{}',
   model_id text,
   source_snapshot jsonb not null,
-  created_at timestamptz not null default now(),
-  unique (season_id, published_on)
+  created_at timestamptz not null default now()
 );
 create index articles_published_idx on articles (published_on desc);
+-- กันซ้ำแยกตามชนิด (ดูเหตุผลใน scripts/migrate-article-kinds.ts): คอลัมน์รายวันซ้ำไม่ได้ในวันเดียวกัน
+-- พรีวิวซ้ำไม่ได้ในแมตช์เดย์เดียวกัน — พรีวิวจงใจไม่ผูกกับวันที่
+create unique index articles_daily_published_on_key on articles (season_id, published_on) where kind = 'daily';
+create unique index articles_preview_matchday_key on articles (season_id, matchday) where kind = 'preview';
 
 -- ========== ops / caching ==========
 create table api_cache (
@@ -315,6 +326,16 @@ create table notifications_sent (
   unique (league_id, kind, ref)
 );
 create index notifications_sent_lookup_idx on notifications_sent (league_id, kind, sent_at desc);
+
+-- ========== สถานะล่าสุดของเรื่องที่ระบบเฝ้าดู (แจ้งเตือน ops) ==========
+-- ส่ง Discord (OPS_DISCORD_WEBHOOK_URL) เฉพาะตอนสถานะเปลี่ยน — ดู src/lib/notify/ops.ts
+-- key เช่น 'cron:sync_results' | 'stale:run_ai_predictions' | 'agent:mistral-small'
+create table ops_alerts (
+  key text primary key,
+  state text not null,                -- 'ok' | 'error' | 'stale' | 'down'
+  detail text,
+  updated_at timestamptz not null default now()
+);
 
 create table cron_runs (              -- แนะนำ ไม่บังคับ แต่ช่วย debug มากเวลาโปรเจกต์รันยาวทั้งฤดูกาล
   id uuid primary key default gen_random_uuid(),

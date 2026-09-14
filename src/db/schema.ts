@@ -324,6 +324,10 @@ export const aiPredictionLogs = pgTable(
     contextSnapshot: jsonb("context_snapshot").notNull(),
     prompt: text("prompt").notNull(),
     reasoning: text("reasoning"),
+    /** ความน่าจะเป็น (%) ของแต่ละผล รวม 100 — null ถ้าโมเดลไม่ให้ (ดู lib/ai/probabilities.ts) */
+    probHome: smallint("prob_home"),
+    probDraw: smallint("prob_draw"),
+    probAway: smallint("prob_away"),
     rawResponse: text("raw_response"),
     parsedHomeScore: smallint("parsed_home_score"),
     parsedAwayScore: smallint("parsed_away_score"),
@@ -346,6 +350,10 @@ export const articles = pgTable(
       .notNull()
       .references(() => seasons.id, { onDelete: "cascade" }),
     publishedOn: date("published_on").notNull(),
+    /** 'daily' = คอลัมน์ประจำวัน · 'preview' = พรีวิวก่อนแมตช์เดย์ */
+    kind: text("kind").notNull().default("daily"),
+    /** เฉพาะ preview: แมตช์เดย์ที่พรีวิว */
+    matchday: integer("matchday"),
     title: text("title").notNull(),
     body: text("body").notNull(),
     coverImageUrls: text("cover_image_urls").array().notNull().default([]),
@@ -356,10 +364,12 @@ export const articles = pgTable(
       .defaultNow(),
   },
   (table) => [
-    uniqueIndex("articles_season_id_published_on_key").on(
-      table.seasonId,
-      table.publishedOn,
-    ),
+    uniqueIndex("articles_daily_published_on_key")
+      .on(table.seasonId, table.publishedOn)
+      .where(sql`kind = 'daily'`),
+    uniqueIndex("articles_preview_matchday_key")
+      .on(table.seasonId, table.matchday)
+      .where(sql`kind = 'preview'`),
     index("articles_published_idx").on(table.publishedOn),
   ],
 );
@@ -388,6 +398,16 @@ export const notificationsSent = pgTable(
   },
   (t) => [unique().on(t.leagueId, t.kind, t.ref)],
 );
+
+// สถานะล่าสุดของแต่ละเรื่องที่เฝ้าดู — ส่ง Discord ops เฉพาะตอนเปลี่ยน (ดู lib/notify/ops.ts)
+export const opsAlerts = pgTable("ops_alerts", {
+  key: text("key").primaryKey(),
+  state: text("state").notNull(),
+  detail: text("detail"),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
 
 export const cronRuns = pgTable("cron_runs", {
   id: uuid("id").primaryKey().defaultRandom(),

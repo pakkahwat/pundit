@@ -69,6 +69,7 @@ const LOOKS: Record<string, AiLook> = {
   'groq-gpt-oss': { color: '#8b5cf6', text: '120' }, // บิ๊กเบิ้ม — GPT-OSS 120B
   'groq-gpt-oss-20b': { color: '#f43f5e', text: '20' }, // น้องเล็กหัวใจโต — GPT-OSS 20B
   'baseline-form': { color: '#3b82f6', glyph: CHART }, // ลุงสถิติ — ดูสถิติล้วน ไม่ได้ใช้ AI
+  'ai-council': { color: '#f59e0b', text: 'Σ' }, // สภา AI — ผลรวมเสียงโหวตของ AI ทุกตัว
   'open-router': { color: '#6950EF', glyph: QWEN }, // นินจาเงียบเหงา — Qwen3.8 27B (สีแบรนด์ Qwen)
   'claude-haiku': { color: '#D97757', glyph: CLAUDE }, // นักปราชญ์ส้ม — Claude Haiku (สีแบรนด์จริง สมชื่อส้มพอดี)
 };

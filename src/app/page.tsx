@@ -152,6 +152,7 @@ export default async function Home(props: PageProps<"/">) {
       title: articles.title,
       body: articles.body,
       coverImageUrls: articles.coverImageUrls,
+      kind: articles.kind,
     })
     .from(articles)
     .orderBy(desc(articles.publishedOn), desc(articles.createdAt))
@@ -363,6 +364,7 @@ export default async function Home(props: PageProps<"/">) {
                     dateLabel={formatArticleDate(a.publishedOn)}
                     coverImageUrls={a.coverImageUrls}
                     excerpt={excerptOf(a.body)}
+                    kindLabel={a.kind === "preview" ? "พรีวิวแมตช์เดย์" : null}
                   >
                     <ArticleBody body={a.body} />
                   </ArticleCard>

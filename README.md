@@ -9,7 +9,7 @@
 ## Stack
 
 Next.js 16 (App Router) · TypeScript · Postgres บน Neon · Drizzle ORM · Auth.js (Google)
-Tailwind CSS v4 · Vercel AI SDK (Gemini, Groq, Mistral, OpenRouter, TokenRouter)
+Tailwind CSS v4 · Vercel AI SDK (Gemini, Groq, Mistral — OpenRouter/TokenRouter/Anthropic ต่อไว้แต่ไม่มีผู้เล่นใช้)
 ข้อมูลฟุตบอลจาก football-data.org · สกอร์สดพรีเมียร์ลีกจาก SportMonks
 ภาพหน้าปกบทความจาก Google News RSS และ Pexels
 
@@ -31,13 +31,15 @@ npm run dev                        # http://localhost:3001
 | `npm run db:sync-results` | ดึงผลแข่งล่าสุดของทุกลีกที่ active |
 | `npm run db:score` | คิดคะแนนจากแมตช์ที่จบแล้ว (idempotent) |
 | `npm run db:run-ai-predictions` | ให้ AI ทายผลนัดที่ยังไม่ปิดรับ |
-| `npm run db:generate-article` | ให้ AI เขียนคอลัมน์ประจำวัน |
+| `npm run db:generate-article` | ให้ AI เขียนคอลัมน์ประจำวัน + พรีวิวก่อนแมตช์เดย์ (`-- --preview` เฉพาะพรีวิว) |
+| `npm run db:notify` | โพสต์แจ้งเตือนเข้า Discord ของแต่ละลีก |
 | `npm run db:studio` | เปิด Drizzle Studio ดู/แก้ข้อมูล |
 | `npm test` | เทสต์ตรรกะล้วน ๆ (ไม่ต้องมีฐานข้อมูล) |
 | `npm run db:reset-play -- --yes` | ล้างคำทาย/คะแนน/ลีก แต่เก็บข้อมูลฟุตบอลไว้ |
 
-งานสี่ตัวแรกมี HTTP endpoint คู่กันที่ `/api/cron/*` สำหรับให้ scheduler ยิงตอน production
-(ใช้โค้ดชุดเดียวกันใน `src/lib/jobs/`) — ดู [DEPLOY.md](./DEPLOY.md)
+งาน sync/score/AI/article/notify มี HTTP endpoint คู่กันที่ `/api/cron/*` สำหรับให้ scheduler ยิงตอน production
+(ใช้โค้ดชุดเดียวกันใน `src/lib/jobs/`) — ดู [DEPLOY.md](./DEPLOY.md) รวมถึง migrations ที่ต้องรันเมื่ออัปเดต
+ดูสถานะฟีเจอร์ทั้งหมดใน [FEATURES.md](./FEATURES.md)
 
 ## ข้อกำหนดที่ห้ามพลาด
 
